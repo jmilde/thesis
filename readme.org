@@ -1,0 +1,32 @@
+* virtual environment
+
+python 3.7 is required.
+
+- initialize
+
+#+BEGIN_SRC sh
+python3 -m venv env
+#+END_SRC
+
+- activate
+
+#+BEGIN_SRC sh
+source env/bin/activate
+#+END_SRC
+
+* install dependencies
+
+#+BEGIN_SRC sh
+pip install -U pip
+pip install -r requirements.txt
+#+END_SRC
+
+* paths
+
+#+BEGIN_SRC sh
+mkdir data
+#+END_SRC
+
+
+* download data
+- from https://data.vision.ee.ethz.ch/sagea/lld/ get "LLD_logo HDF5"

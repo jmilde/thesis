@@ -1,0 +1,5 @@
+/data
+/trial
+**/__pycache__
+/ckpt
+/logs

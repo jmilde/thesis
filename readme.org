@@ -1,4 +1,5 @@
-* virtual environment
+* Master thesis: generative design of logos
+** virtual environment
 
 python 3.7 is required.
 
@@ -14,19 +15,18 @@ python3 -m venv env
 source env/bin/activate
 #+END_SRC
 
-* install dependencies
+
+** install dependencies
 
 #+BEGIN_SRC sh
 pip install -U pip
 pip install -r requirements.txt
 #+END_SRC
 
-* paths
+** paths
 
 #+BEGIN_SRC sh
 mkdir data
 #+END_SRC
-
-
-* download data
+** download data
 - from https://data.vision.ee.ethz.ch/sagea/lld/ get "LLD_logo HDF5"

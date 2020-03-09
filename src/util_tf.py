@@ -24,5 +24,4 @@ def pipe(generator, output_types, prefetch=1, repeat=-1, name='pipe', **kwargs):
     return tf.data.Dataset.from_generator(generator, output_types) \
                           .repeat(repeat) \
                           .prefetch(prefetch) \
-                          .make_one_shot_iterator() \
-                          .get_next()
+                          .__iter__()

@@ -46,11 +46,6 @@ def train():
 
     model_name = f"vqvae-b{batch_size}-res{n_resblock}-f{filters}-e{emb_dim}-nre{nr_emb}"
 
-    #from collections import Counter
-    #imgs = h5py.File(path_data, 'r')['data']
-    #xx=[tuple(map(lambda x: round(x,1),colorsys.rgb_to_hsv(*y))) for x in np.rollaxis(imgs[2], 0,3) for y in x]
-    #xx=[Counter([tuple(round(yy,1) for yy in y/255) for x in np.rollaxis(img, 0,3) for y in x]).most_common(10) for img in tqdm(imgs)]
-
     #pipeline
     bg = batch(path_data, batch_size)
     data = pipe(lambda: bg, (tf.float32),prefetch=4)

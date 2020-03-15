@@ -3,7 +3,7 @@ from src.util import Record
 
 
 class vqvae(Record):
-    def __init__(self, filters, inpt_dim, emb_dim, nr_emb, n_resblock, kernel_size):
+    def __init__(self, filters, inpt_channels, img_w, img_h, emb_dim, nr_emb, n_resblock, kernel_size):
         n_resblock = n_resblock
         filters = filters
         kernel_size = kernel_size
@@ -11,13 +11,19 @@ class vqvae(Record):
         self.emb_dim = emb_dim
         self.nr_emb = nr_emb
 
+        self.relu = tf.keras.layers.ReLU()
+
         #encoder
-        self.e_top = Encoder(n_resblock, filters, kernel_size, downsample=2)
-        self.e_bot = Encoder(n_resblock, filters, kernel_size, downsample=4)
+        self.e_top  = Encoder(n_resblock, filters, kernel_size, downsample=2)
+        self.e_bot  = Encoder(n_resblock, filters, kernel_size, downsample=4)
+
+        # conditional
+        self.cond_top   = tf.keras.layers.Dense((img_h/8)*(img_w/8)*emb_dim)
+        self.cond_bot   = tf.keras.layers.Dense((img_h/4)*(img_w/4)*emb_dim)
 
         # resizing for/after quantizer
-        self.xt_rs = tf.keras.layers.Conv2D(self.emb_dim, kernel_size=1, padding="same")
-        self.xb_rs = tf.keras.layers.Conv2D(self.emb_dim, kernel_size=1, padding="same")
+        self.xt_rs  = tf.keras.layers.Conv2D(self.emb_dim, kernel_size=1, padding="same")
+        self.xb_rs  = tf.keras.layers.Conv2D(self.emb_dim, kernel_size=1, padding="same")
         self.qxt_rs = tf.keras.layers.Conv2D(filters, kernel_size=1, padding="same")
         self.qxb_rs = tf.keras.layers.Conv2D(filters, kernel_size=1, padding="same")
 
@@ -28,10 +34,10 @@ class vqvae(Record):
         #self.q_bot = VectorQuantizer(nr_emb)
 
         # decoder
-        self.d_b = Decoder(inpt_dim, n_resblock, filters, kernel_size, upsample=4)
+        self.d_b = Decoder(inpt_channels, n_resblock, filters, kernel_size, upsample=4)
         self.d_t = Decoder(filters, n_resblock, filters, kernel_size, upsample=2)
 
-    def __call__(self, inpt, latent_weight=1):
+    def __call__(self, inpt, cond, latent_weight=1):
 
         #TODO: check why others used permutations and concatinations for combining top/bottom
         # encode/downsample
@@ -42,15 +48,25 @@ class vqvae(Record):
         ## top
         xt = self.xt_rs(xt) # kernel=1 conv to adjust filter number [b, w/8, h/8, emb_dim]
         qxt, l_t = self.q_top(xt) # quantization: [b, w/8, h/8, emb_dim]
-        qxt = self.qxt_rs(qxt) # kernel=1 conv to adjust filter number: [b, w/8, h/8, filters]
-        qxt = self.d_t(qxt) # [b, w/4, h/4, filters] # decode/upsample
+        # insert conditional information
+        b, w_8, h_8, emb_dim = tf.shape(qxt)
+        qxtc = self.cond_top(tf.concat([tf.reshape(qxt,(b, w_8*h_8*emb_dim)), cond], 1))
+        qxtc = tf.reshape(qxtc, (b,w_8,h_8,emb_dim))
+        # resize
+        qxtc = self.qxt_rs(qxtc) # kernel=1 conv to adjust filter number: [b, w/8, h/8, filters]
+        qxtc = self.d_t(qxtc) # [b, w/4, h/4, filters] # decode/upsample
         ## bot
         qxb, l_b = self.q_bot(self.xb_rs(xb + qxt)) # [b, w/4, h/4, emb_dim]
+        # insert conditional information
+        b, w_4, h_4, emb_dim = tf.shape(qxt)
+        qxtc = self.cond_top(tf.concat([tf.reshape(qxt,(b, w_4*h_4*emb_dim)), cond], 1))
+        qxtc = tf.reshape(qxtc, (b,w_4,h_4,emb_dim))
         qxb = self.qxb_rs(qxb) # kernel=1 conv to adjust filter number [b, w/4, h/4, filters]
+        # could probaly avoid this ^ by setting the dense layer in a way that shape[3] wil be filters not emb_dim
 
 
         # decode/upsample
-        img = tf.clip_by_value(self.d_b(qxb + qxt),0,1)
+        img = tf.clip_by_value(self.d_b(qxb + qxt),0,1) #todo: try without clipping for loss
 
         loss_latent = tf.reduce_mean(l_t) + tf.reduce_mean(l_b)
         loss_mse =  tf.reduce_mean(tf.square(inpt-img))#reconstruction loss
@@ -119,9 +135,9 @@ class Encoder(Record):
                            tf.keras.layers.ReLU(),]
         elif downsample == 4:
             self.layers = [tf.keras.layers.Conv2D(filters, kernel_size=4, strides=2, padding="same"),
-                            tf.keras.layers.ReLU(),
-                            tf.keras.layers.Conv2D(filters, kernel_size=4, strides=2, padding="same"),
-                            tf.keras.layers.ReLU(),]
+                           tf.keras.layers.ReLU(),
+                           tf.keras.layers.Conv2D(filters, kernel_size=4, strides=2, padding="same"),
+                           tf.keras.layers.ReLU(),]
 
         for _ in range(n_resblock):
             self.layers.append(ResBlock(filters))
@@ -156,9 +172,9 @@ class Decoder(Record):
 
 class ResBlock(Record):
     def __init__(self, filters):
-            self.relu = tf.keras.layers.ReLU()
-            self.conv1 = tf.keras.layers.Conv2D(filters, kernel_size=3, padding="same")
-            self.conv2 = tf.keras.layers.Conv2D(filters, kernel_size=3, padding="same")
+        self.relu = tf.keras.layers.ReLU()
+        self.conv1 = tf.keras.layers.Conv2D(filters, kernel_size=3, padding="same")
+        self.conv2 = tf.keras.layers.Conv2D(filters, kernel_size=3, padding="same")
 
     def __call__(self, inpt):
         with tf.name_scope("ResBlock") as scope:

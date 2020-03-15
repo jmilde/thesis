@@ -13,12 +13,14 @@ def get_colors(img, top_n=10):
 
 
 path_data = '/home/jan/Documents/uni/thesis/data/LLD-logo.hdf5'
-imgs = h5py.File(path_data, 'r')['data'][:100]
+path_out = "~/data/color_conditional.npz"
+#path_out = "./data/color_conditional.npz"
+imgs = h5py.File(path_data, 'r')['data']
 
 ### multicore if imgs can be stored in memory
 with concurrent.futures.ProcessPoolExecutor() as executor:
     color_conditional = list(tqdm(executor.map(get_colors, imgs), total=len(imgs)))
-np.savez_compressed(expanduser("~/data/color_conditional.npz"), {"colors": color_conditional})
+np.savez_compressed(expanduser(path_out), colors= color_conditional)
 
 ### non multicore
 #color_conditional = []

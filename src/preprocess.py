@@ -4,6 +4,7 @@ import numpy as np
 import concurrent.futures
 from tqdm import tqdm
 from os.path import expanduser
+from skimage.transform import resize
 
 
 #################################
@@ -41,6 +42,23 @@ def prep_color():
         #for img in tqdm(imgs):
         #    color_conditional.append(get_colors(img))
 
+def resize_img(img, shape):
+    if shape[1]==400:
+        return resize(np.rollaxis(img,0,3), (384,384)).astype("uint8")
+    else:
+        return resize(np.rollaxis(img[:,:shape[1], :shape[2]],0,3), (384,384)).astype("uint8")
+
+def prep_data():
+    path_data = expanduser('~/data/LLD-logo.hdf5')
+    path_out  = expanduser("~/data/imgs_resized.npz")
+
+    imgs = h5py.File(path_data, 'r')['data']
+    shapes = h5py.File(path_data, 'r')['shapes']
+    with concurrent.futures.ProcessPoolExecutor() as executor:
+        imgs_resized = list(tqdm(executor.map(resize_img, imgs, shapes), total=len(imgs)))
+    np.savez_compressed(expanduser(path_out), imgs= imgs_resized)
+
 
 if __name__=="__main__":
+    prep_data()
     prep_color()

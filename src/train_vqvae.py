@@ -1,6 +1,6 @@
 from src.util_tf import batch, pipe
 from src.util_io import pform
-from src.model import vqvae
+from src.models.vqvae import vqvae
 import numpy as np
 import h5py
 from tqdm import trange,tqdm
@@ -70,42 +70,37 @@ def main():
     # checkpoints
     ckpt = tf.train.Checkpoint(step=tf.Variable(1), optimizer=optimizer, net=model)
     manager = tf.train.CheckpointManager(ckpt, path_ckpt, max_to_keep=3, checkpoint_name=model_name)
-    #status = checkpoint.restore(manager.latest_checkpoint)
+    ckpt.restore(manager.latest_checkpoint)
 
-    @tf.function
-    def train():
-        # training and logging
-        step = 0
-        for _ in trange(epochs, desc="epochs", position=0):
-            for _ in trange(ds_size//batch_size, desc="steps in epochs", position=1, leave=False):
-                step += 1
-                ckpt.step.assign_add(1)
-                with  tf.GradientTape() as tape:
-                    output = train_model(next(data))
-                    loss = output["loss"]
-                optimizer.apply_gradients(zip(tape.gradient(loss, model.trainable_variables), model.trainable_variables))
-                tf.py_function(manager.save(), [], [tf.string])
+    # training and logging
+    step = 0
+    for _ in trange(epochs, desc="epochs", position=0):
+        for _ in trange(ds_size//batch_size, desc="steps in epochs", position=1, leave=False):
+            step += 1
+            ckpt.step.assign_add(1)
+            with  tf.GradientTape() as tape:
+                output = train_model(next(data))
+                loss = output["loss"]
+            optimizer.apply_gradients(zip(tape.gradient(loss, model.trainable_variables), model.trainable_variables))
 
-                # get graph
-                if step==1:
-                    with writer.as_default():
-                        tf.summary.trace_export(name="my_func_trace", step=0, profiler_outdir=path_log)
-                # logging
-                if step%logfrq==0:
-                    with writer.as_default():
-                        tf.summary.image("original", output["inpt"].numpy(), step=step, max_outputs=2)
-                        tf.summary.image("reconstruction", output["img"].numpy(), step=step, max_outputs=2)
-                        tf.summary.scalar("loss", output["loss"].numpy(), step=step)
-                        tf.summary.scalar("loss_mse", output["loss_mse"].numpy(), step=step)
-                        tf.summary.scalar("loss_latent", output["loss_latent"].numpy(), step=step)
-                        tf.summary.scalar("perplexity_b", output["perplexity_b"].numpy(), step=step)
-                        tf.summary.scalar("perplexity_t", output["perplexity_t"].numpy(), step=step)
-                        writer.flush()
+            # get graph
+            if step==1:
+                with writer.as_default():
+                    tf.summary.trace_export(name="my_func_trace", step=0, profiler_outdir=path_log)
+            # logging
+            if step%logfrq==0:
+                with writer.as_default():
+                    tf.summary.image("original", output["inpt"].numpy(), step=step, max_outputs=2)
+                    tf.summary.image("reconstruction", output["img"].numpy(), step=step, max_outputs=2)
+                    tf.summary.scalar("loss", output["loss"].numpy(), step=step)
+                    tf.summary.scalar("loss_mse", output["loss_mse"].numpy(), step=step)
+                    tf.summary.scalar("loss_latent", output["loss_latent"].numpy(), step=step)
+                    tf.summary.scalar("perplexity_b", output["perplexity_b"].numpy(), step=step)
+                    tf.summary.scalar("perplexity_t", output["perplexity_t"].numpy(), step=step)
+                    writer.flush()
 
 
-                tf.py_function(manager.save(), [], [tf.string])
-
-    train()
+            manager.save()
 
 if __name__=="__main__":
     main()

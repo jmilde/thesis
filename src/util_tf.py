@@ -71,7 +71,7 @@ class upsampling_conv_block(Record):
 
 
 class downsampling_res_block(Record):
-    def __init__(self, filters, norm_func, strides=2, kernel_size=3):
+    def __init__(self, filters, normalizer, strides=2, kernel_size=3):
         self.relu = tf.keras.layers.ReLU()
         self.conv_down1 = tf.keras.layers.Conv2D(filters, kernel_size=kernel_size, strides=strides, padding="same")
         self.normalize_down1 = normalizer()
@@ -84,16 +84,20 @@ class downsampling_res_block(Record):
 
     def __call__(self, inpt):
         with tf.name_scope("upsampling_block") as scope:
-            skip = self.normalize_down1(self.conv_down1(inpt))
+            skip = self.conv_down1(inpt)
+            #skip = self.normalize_down1(skip)
 
-            x = self.relu(self.normalize_down2(self.conv_down2(inpt)))
-            x = self.normalize(self.conv(x))
+            x = self.conv_down2(inpt)
+            # x = self.normalize_down2()
+            x = self.relu(x)
+            x = self.conv(x)
+            #x = self.normalize(x)
 
             x = self.relu(x + skip)
         return x
 
 class upsampling_res_block(Record):
-    def __init__(self, filters, norm_func, strides=2, kernel_size=3):
+    def __init__(self, filters, normalizer, strides=2, kernel_size=3):
         self.relu = tf.keras.layers.ReLU()
         self.conv_up1 = tf.keras.layers.Conv2DTranspose(filters, kernel_size=kernel_size, strides=strides, padding="same")
         self.normalize_up1 = normalizer()
@@ -106,10 +110,14 @@ class upsampling_res_block(Record):
 
     def __call__(self, inpt):
         with tf.name_scope("upsampling_block") as scope:
-            skip = self.normalize_up1(self.conv_up1(inpt))
+            skip = self.conv_up1(inpt)
+            #skip = self.normalize_up1(skip)
 
-            x = self.relu(self.normalize_up2(self.conv_up2(inpt)))
-            x = self.normalize(self.conv(x))
+            x = self.conv_up2(inpt)
+            #x = self.normalize_up2(x)
+            x = self.relu(x)
+            x = self.conv(x)
+            #x = self.normalize(x)
 
             x = self.relu(x + skip)
         return x
@@ -127,10 +135,10 @@ class ResBlock(Record):
     def __call__(self, inpt):
         with tf.name_scope("ResBlock") as scope:
             x = self.conv1(inpt)
-            x = self.normalize1(x)
+            #x = self.normalize1(x)
             x = self.relu(x)
             x = self.conv2(x)
-            x = self.normalize2(x)
+            #x = self.normalize2(x)
             x = self.relu(x+inpt)
         return x
 
@@ -139,7 +147,7 @@ class VariationalEncoding(Record):
     def __init__(self, btlnk):
         self.relu = tf.keras.layers.ReLU()
         self.flatten = tf.keras.layers.Flatten(data_format="channels_first")
-        self.dense_btlnk = tf.keras.layers.Dense(btlnk)
+        #self.dense_btlnk = tf.keras.layers.Dense(btlnk)
         self.normalize = tf.keras.layers.LayerNormalization()
         self.dense_mu = tf.keras.layers.Dense(btlnk)
         self.dense_lv = tf.keras.layers.Dense(btlnk)
@@ -147,7 +155,8 @@ class VariationalEncoding(Record):
     def __call__(self, x):
         with tf.name_scope("variational") as scope:
             x = self.flatten(x)
-            x = self.normalize(self.relu(self.dense_btlnk(x)))
+            #x = self.relu(self.dense_btlnk(x))
+            #x = self.normalize()
             with tf.name_scope("latent") as scope:
                 mu = self.dense_mu(x)
                 lv = self.dense_lv(x)

@@ -36,22 +36,26 @@ def main():
     #path_data = '/home/jan/Documents/uni/thesis/data/LLD-logo.hdf5'
     #path_log = f"./tmp/{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
 
-    btlnk = 1000
+    btlnk = 2048
     n_downsampling = 6 # img_size_downample = img_size/2**n_downsampling
+    filter_startsize= 32
+    kernel_size=4
     batch_size = 12
     inpt_dim = 3
-    n_resblock=2
-    filters= 256
-    kernel_size=4
+
+    res_filters= 256
+    n_resblock=0
+
+
     emb_dim = 64
     nr_emb = 512
     epochs = 2
     logfrq = 20 # how many step between logs
-
+    img_dim = (384,384,3)
     ds_size = len(h5py.File(path_datah5, 'r')['data'])
     #ds_size = len(np.load(path_data)['imgs'])
 
-    model_name = f"vae-btlnk{btlnk}-b{batch_size}-res{n_resblock}-f{filters}-e{emb_dim}-nre{nr_emb}"
+    model_name = f"vae-btlnk{btlnk}-b{batch_size}-res{n_resblock}-f{filter_startsize}-e{emb_dim}-nre{nr_emb}"
 
     #pipeline
     #bg = batch_resized(path_data, batch_size)
@@ -59,8 +63,9 @@ def main():
     data = pipe(lambda: bg, (tf.float32),prefetch=6)
 
     # model
-    inpt = tf.keras.Input(shape=(384,384,3))
-    architecture = vae(n_downsampling, btlnk,filters, inpt_dim, emb_dim, nr_emb, n_resblock, kernel_size,
+    inpt = tf.keras.Input(shape=img_dim)
+    architecture = vae(n_downsampling, filter_startsize, btlnk, res_filters, inpt_dim, emb_dim, nr_emb, n_resblock, kernel_size,
+                       img_dim=img_dim,
                        normalizer_enc=tfa.layers.InstanceNormalization,
                        normalizer_dec=tfa.layers.InstanceNormalization,)
     model = tf.keras.models.Model(inpt, architecture(inpt))

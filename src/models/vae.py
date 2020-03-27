@@ -2,83 +2,143 @@ import tensorflow as tf
 from src.util import Record
 from src.util_tf import ResBlock, VariationalEncoding, downsampling_res_block, upsampling_res_block
 
-class vae(Record):
-    def __init__(self, n_downsampling, filter_startsize, btlnk, res_filters, inpt_dim, emb_dim, nr_emb, n_resblock, kernel_size,
-                 accelerate=1e-4,
-                 img_dim = (384,384,3),
+class VAE(tf.keras.Model):
+    def __init__(self, inpt_dim, channels, btlnk,
+                 accelerate=1,
                  normalizer_enc=tf.keras.layers.BatchNormalization,
-                 normalizer_dec=tf.keras.layers.BatchNormalization,):
-        self.accelerate = accelerate
+                 normalizer_dec=tf.keras.layers.BatchNormalization,
+                 optimizer= tf.keras.optimizers.Adam(),
+                 name="VAE",
+                 **kwargs):
+        super(VAE, self).__init__(name=name, **kwargs)
 
-        self.encoder = Encoder(n_downsampling, filter_startsize, n_resblock, res_filters, kernel_size, normalizer=normalizer_enc)
+        self.accelerate = accelerate
+        self.inpt_dim = inpt_dim
+        self.optimizer = optimizer
+
+        self.inpt_layer = tf.keras.layers.InputLayer(inpt_dim)
+        self.encoder = Encoder(channels, normalizer=normalizer_enc)
         self.variational = VariationalEncoding(btlnk)
 
-        dec_first_conv_filters = filter_startsize*(2**n_downsampling)
-        xy_dim_after_downsample = img_dim[1]/(2**n_downsampling)
-        self.dec_reshape_dim = (-1, int(xy_dim_after_downsample), int(xy_dim_after_downsample), int(dec_first_conv_filters))
-        self.resize  = tf.keras.layers.Dense(xy_dim_after_downsample*xy_dim_after_downsample*dec_first_conv_filters)
-        self.decoder = Decoder(n_downsampling, inpt_dim, dec_first_conv_filters, n_resblock, res_filters, kernel_size, normalizer=normalizer_dec)
+        xy_dim_after_downsample = inpt_dim[1]/(2**len(channels))
+        self.dec_reshape_dim = (-1, int(xy_dim_after_downsample), int(xy_dim_after_downsample), channels[-1])
+        self.dense_resize  = tf.keras.layers.Dense(xy_dim_after_downsample*xy_dim_after_downsample*channels[-1],name="dense_resize")
+        self.decoder = Decoder(inpt_dim[-1], channels[::-1], normalizer=normalizer_dec)
 
-    def __call__(self, inpt, step=0):
-        x = self.encoder(inpt)
+    def encode(self, x, training=True):
+        x = self.encoder(x, training=training)
         z, mu, lv = self.variational(x)
-        x = tf.reshape(self.resize(z), self.dec_reshape_dim)
-        img = self.decoder(x)
-        img = tf.math.sigmoid(img)
+        return z, mu, lv
+
+    def decode(self, x, training=True):
+        return self.decoder(x)
+
+    def call(self, x, step=0, training=True):
+        x = self.inpt_layer(x)
+
+        z, mu, lv = self.encode(x, training=training)
+        z_reshape = tf.reshape(self.dense_resize(z), self.dec_reshape_dim)
+        x_rec = self.decode(z_reshape, training=training)
 
         # kl loss
-        rate = self.accelerate * tf.cast(step, tf.float32)
+        rate = tf.cast(step, tf.float32)/self.accelerate
         rate_anneal = tf.tanh(rate)
-        loss_kl = tf.reduce_mean(0.5 * (tf.square(mu) + tf.exp(lv) - lv - 1.0))
+        loss_latent = tf.reduce_mean(0.5 * (tf.square(mu) + tf.exp(lv) - lv - 1.0))
 
-        # TODO: try different loss functions
-        #epsilon = 1e-10
-        #loss_rec = tf.reduce_mean(-tf.reduce_sum(inpt * tf.math.log(epsilon+img) + (1-inpt) * tf.math.log(epsilon+1-img),  axis=1))
-        loss_rec =  tf.reduce_mean(tf.reduce_sum(tf.math.square(inpt-img), axis=0))
-        #mean squared error
-        #loss_rec = tf.reduce_mean(tf.abs(inpt - img))  # absolute loss
+        # reconstruction loss
+        loss_rec =  tf.reduce_mean(tf.reduce_sum(tf.math.square(x-x_rec), axis=0))
 
-        loss = loss_rec + loss_kl*rate_anneal
 
-        return {"inpt":inpt,
-                "img": img,
-                #"img":tf.clip_by_value(img,0,1),
+        loss = loss_rec + loss_latent*rate_anneal
+
+        return {"x":x,
+                "x_rec": x_rec,
                 "loss": loss,
                 "loss_rec": loss_rec,
-                "loss_kl": loss_kl,
+                "loss_latent": loss_latent,
                 "mu":tf.reduce_mean(mu),
-                "lv": tf.reduce_mean(lv),}
+                "lv": tf.reduce_mean(lv),
+                "rate_anneal": rate_anneal}
 
 
-class Encoder(Record):
-    def __init__(self,n_downsampling, filter_startsize=32, n_resblock=2, res_filters=256,  kernel_size=4, normalizer=tf.keras.layers.BatchNormalization):
-    # downsample by 16 -> [b,24,24,3]
-        #self.layers = [downsampling_res_block(filter_startsize*(2**i), normalizer, kernel_size=kernel_size) for i, _ in enumerate(range(n_downsampling))]
-        self.layers = [downsampling_res_block(filter_startsize*(2**i), normalizer, kernel_size=kernel_size) for i, _ in enumerate(range(n_downsampling))]
+    @tf.function
+    def train(self, x, step):
+        with  tf.GradientTape() as tape:
+            output = self.call(x, step, training = True)
+            loss = output["loss"]
+        self.optimizer.apply_gradients(zip(tape.gradient(loss, self.trainable_variables), self.trainable_variables))
+        return output
 
-        #for _ in range(n_resblock):
-        #    self.layers.append(ResBlock(res_filters, normalizer))
 
-    def __call__(self, x):
-        with tf.name_scope("Encoder") as scope:
-            for l in self.layers:
-                x = l(x)
+class Encoder(tf.keras.layers.Layer):
+    def __init__(self, channels=[64, 128, 256, 512, 512, 512],
+                 normalizer=tf.keras.layers.BatchNormalization,
+                 name="Encoder",
+                 **kwargs):
+        super(Encoder, self).__init__(name=name, **kwargs)
+
+        self.layers = [tf.keras.layers.Conv2D(channels[0],
+                                         kernel_size=5,
+                                         strides=1,
+                                         padding="same",
+                                         use_bias=False,
+                                         activation="relu"),
+                  normalizer(),
+                  tf.keras.layers.ReLU(),
+                  tf.keras.layers.AveragePooling2D()]
+
+        for i, channel in enumerate(channels[1:], 1):
+            adjust = channel!=channels[i-1]
+            self.layers.append(ResBlock(channel, adjust_channels=adjust))
+            self.layers.append(tf.keras.layers.AveragePooling2D())
+
+
+        self.layers.append(ResBlock(channels[-1]))
+
+    #    layers = []
+    #    for channel in channels:
+    #        layers.append(tf.keras.layers.Conv2D(channel,
+    #                                             kernel_size=4,
+    #                                             strides=2,
+    #                                             padding="same",
+    #                                             use_bias=False,
+    #                                             activation="relu"))
+
+    def call(self, x, training=False):
+        for layer in self.layers:
+            x = layer(x, training=training)
         return x
 
 
-class Decoder(Record):
-    def __init__(self,n_upsampling, out_filter, filter_startsize=2048, n_resblock=2, res_filters=256, nr_filters=256, kernel_size=4, upsample=2, normalizer=tf.keras.layers.BatchNormalization):
-        #conv to adjust filter number: [b, w/8, h/8, filters] so residual blocks work
 
-        self.layers= [tf.keras.layers.Conv2DTranspose(int(filter_startsize/(2**i)), kernel_size=4, strides=2, padding="same")
-                           for i, _ in enumerate(range(n_upsampling))]
-        #self.layers = [tf.keras.layers.Conv2D(res_filters, kernel_size=3, padding="same")]
-        #self.layers.extend([ResBlock(res_filters, normalizer) for _ in range(n_resblock)])
-        #self.layers.extend([upsampling_res_block(filter_startsize/(2**i), normalizer, kernel_size=kernel_size) for i, _ in enumerate(range(n_upsampling)]))
-        self.layers.append(tf.keras.layers.Conv2DTranspose(out_filter, kernel_size=4, strides=1, padding="same"))
-        #self.layers.append(normalizer())
-    def __call__(self, x):
-        with tf.name_scope("Decoder") as scope:
-            for l in self.layers:
-                x = l(x)
-            return x
+class Decoder(tf.keras.layers.Layer):
+    def __init__(self, out_channels,
+                 channels=[512, 512, 512, 256, 128, 64],
+                 normalizer=tf.keras.layers.BatchNormalization,
+                 name="Decoder",
+                 **kwargs):
+        super(Decoder, self).__init__(name=name, **kwargs)
+        self.layers = []
+
+        #for i, channel in enumerate(channels):
+         #   adjust = channel!=channels[max(0,i-1)]
+          #  self.layers.append(ResBlock(channel, adjust_channels=adjust))
+           # self.layers.append(tf.keras.layers.UpSampling2D())
+
+        #self.layers.append(ResBlock(channels[-1]))
+
+        for channel in channels:
+            self.layers.append(tf.keras.layers.Conv2DTranspose(channel,
+                                                          kernel_size=4,
+                                                          strides=2,
+                                                          padding="same",
+                                                          activation="relu"))
+
+        self.layers.append(tf.keras.layers.Conv2DTranspose(out_channels, kernel_size=4, strides=1,
+                                                      use_bias = False,
+                                                      padding="same", activation="sigmoid"))
+
+    def call(self, x, training=False):
+        for layer in self.layers:
+            x = layer(x, training=training)
+        return x

@@ -21,6 +21,18 @@ def batch(path, batch_size, seed=26, channel_first=False):
         else:
             b.append(resize(np.rollaxis(data[i], 0, 3), (384,384))/255)
 
+def batch_resize(path, batch_size, size=(64,64), seed=26):
+    """batch function to use with pipe"""
+    ds     = h5py.File(path, 'r')
+    data   = ds["data"]
+    shapes = ds["shapes"]
+    b = []
+    for i in sample(len(data), seed):
+        if batch_size == len(b):
+            yield np.array(b, dtype=np.float32)
+            b = []
+        shape = shapes[i]
+        b.append(resize(np.rollaxis(data[i][:,:shape[1], :shape[2]],0,3), size)/255)
 
 def batch_resized(path, batch_size, seed=26, channel_first=False):
     """batch function to use with pipe"""
@@ -122,25 +134,45 @@ class upsampling_res_block(Record):
             x = self.relu(x + skip)
         return x
 
+class ResBlock(tf.keras.layers.Layer):
+    def __init__(self, nr_filters, adjust_channels=False, normalizer=tf.keras.layers.BatchNormalization):
+        super(ResBlock, self).__init__(name='ResBlock')
+        if adjust_channels: self.adjust = tf.keras.layers.Conv2D(nr_filters, kernel_size=1, padding="same", use_bias=False)
+        else: self.adjust = None
 
+        self.relu = tf.keras.layers.ReLU()
+        self.conv1 = tf.keras.layers.Conv2D(nr_filters, kernel_size=3, padding="same", use_bias=False)
+        self.normalize1 = normalizer()
+        self.conv2 = tf.keras.layers.Conv2D(nr_filters, kernel_size=3, padding="same", use_bias=False)
+        self.normalize2 = normalizer()
 
-class ResBlock(Record):
-    def __init__(self, nr_filters, normalizer=tf.keras.layers.BatchNormalization):
-            self.relu = tf.keras.layers.ReLU()
-            self.conv1 = tf.keras.layers.Conv2D(nr_filters, kernel_size=3, padding="same")
-            self.normalize1 = normalizer()
-            self.conv2 = tf.keras.layers.Conv2D(nr_filters, kernel_size=3, padding="same")
-            self.normalize2 = normalizer()
-
-    def __call__(self, inpt):
+    def call(self, inpt):
         with tf.name_scope("ResBlock") as scope:
+            if self.adjust: inpt = self.adjust(inpt)
             x = self.conv1(inpt)
-            #x = self.normalize1(x)
+            x = self.normalize1(x)
             x = self.relu(x)
             x = self.conv2(x)
-            #x = self.normalize2(x)
-            x = self.relu(x+inpt)
+            x = self.relu(self.normalize2(x+inpt))
         return x
+
+#class ResBlock(Record):
+#    def __init__(self, nr_filters, normalizer=tf.keras.layers.BatchNormalization):
+#            self.relu = tf.keras.layers.ReLU()
+#            self.conv1 = tf.keras.layers.Conv2D(nr_filters, kernel_size=3, padding="same")
+#            self.normalize1 = normalizer()
+#            self.conv2 = tf.keras.layers.Conv2D(nr_filters, kernel_size=3, padding="same")
+#            self.normalize2 = normalizer()
+#
+#    def __call__(self, inpt):
+#        with tf.name_scope("ResBlock") as scope:
+#            x = self.conv1(inpt)
+#            #x = self.normalize1(x)
+#            x = self.relu(x)
+#            x = self.conv2(x)
+#            #x = self.normalize2(x)
+#            x = self.relu(x+inpt)
+#        return x
 
 
 class VariationalEncoding(Record):

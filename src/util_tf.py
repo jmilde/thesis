@@ -134,6 +134,10 @@ class upsampling_res_block(Record):
             x = self.relu(x + skip)
         return x
 
+def sigmoid(x, shift=0.0, mult=20):
+    """ squashes a value with a sigmoid"""
+    return tf.constant(1.0) / (tf.constant(1.0) + tf.exp(-tf.constant(1.0) * (x * mult)))
+
 class ResBlock(tf.keras.layers.Layer):
     def __init__(self, nr_filters, adjust_channels=False, normalizer=tf.keras.layers.BatchNormalization):
         super(ResBlock, self).__init__(name='ResBlock')
@@ -175,16 +179,19 @@ class ResBlock(tf.keras.layers.Layer):
 #        return x
 
 
-class VariationalEncoding(Record):
-    def __init__(self, btlnk):
+class VariationalEncoding(tf.keras.layers.Layer):
+    def __init__(self, btlnk,
+                 name="VariationalEncoding",
+                 **kwargs):
+        super(VariationalEncoding, self).__init__(name=name, **kwargs)
         self.relu = tf.keras.layers.ReLU()
-        self.flatten = tf.keras.layers.Flatten(data_format="channels_first")
+        self.flatten = tf.keras.layers.Flatten(data_format="channels_last")
         #self.dense_btlnk = tf.keras.layers.Dense(btlnk)
-        self.normalize = tf.keras.layers.LayerNormalization()
+        #self.normalize = tf.keras.layers.LayerNormalization()
         self.dense_mu = tf.keras.layers.Dense(btlnk)
         self.dense_lv = tf.keras.layers.Dense(btlnk)
 
-    def __call__(self, x):
+    def call(self, x, training=True):
         with tf.name_scope("variational") as scope:
             x = self.flatten(x)
             #x = self.relu(self.dense_btlnk(x))

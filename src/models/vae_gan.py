@@ -167,8 +167,7 @@ class Encoder(tf.keras.layers.Layer):
                                          kernel_size=5,
                                          strides=1,
                                          padding="same",
-                                         use_bias=False,
-                                         activation="relu"),
+                                         use_bias=False),
                        normalizer(),
                        tf.keras.layers.ReLU(),
                        tf.keras.layers.AveragePooling2D()]

@@ -146,12 +146,14 @@ def sigmoid(x, shift=0.0, mult=20):
     return tf.constant(1.0) / (tf.constant(1.0) + tf.exp(-tf.constant(1.0) * (x * mult)))
 
 class ResBlock(tf.keras.layers.Layer):
-    def __init__(self, nr_filters, adjust_channels=False, normalizer=tf.keras.layers.BatchNormalization):
+    def __init__(self, nr_filters, adjust_channels=False, normalizer=tf.keras.layers.BatchNormalization, activation=tf.keras.layers.LeakyRelu(alpha=0.2)):
         super(ResBlock, self).__init__(name='ResBlock')
+
+
         if adjust_channels: self.adjust = tf.keras.layers.Conv2D(nr_filters, kernel_size=1, padding="same", use_bias=False)
         else: self.adjust = None
 
-        self.relu = tf.keras.layers.ReLU()
+        self.activation = activation
         self.conv1 = tf.keras.layers.Conv2D(nr_filters, kernel_size=3, padding="same", use_bias=False)
         self.normalize1 = normalizer()
         self.conv2 = tf.keras.layers.Conv2D(nr_filters, kernel_size=3, padding="same", use_bias=False)
@@ -162,9 +164,9 @@ class ResBlock(tf.keras.layers.Layer):
             if self.adjust: inpt = self.adjust(inpt)
             x = self.conv1(inpt)
             x = self.normalize1(x)
-            x = self.relu(x)
+            x = self.activation(x)
             x = self.conv2(x)
-            x = self.relu(self.normalize2(x+inpt))
+            x = self.activation(self.normalize2(x+inpt))
         return x
 
 #class ResBlock(Record):

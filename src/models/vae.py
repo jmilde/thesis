@@ -82,8 +82,7 @@ class Encoder(tf.keras.layers.Layer):
                                          kernel_size=5,
                                          strides=1,
                                          padding="same",
-                                         use_bias=False,
-                                         activation="relu"),
+                                         use_bias=False),
                   normalizer(),
                   tf.keras.layers.ReLU(),
                   tf.keras.layers.AveragePooling2D()]
@@ -96,14 +95,6 @@ class Encoder(tf.keras.layers.Layer):
 
         self.layers.append(ResBlock(channels[-1]))
 
-    #    layers = []
-    #    for channel in channels:
-    #        layers.append(tf.keras.layers.Conv2D(channel,
-    #                                             kernel_size=4,
-    #                                             strides=2,
-    #                                             padding="same",
-    #                                             use_bias=False,
-    #                                             activation="relu"))
 
     def call(self, x, training=False):
         for layer in self.layers:

@@ -6,6 +6,13 @@ from src.util_np import sample
 from src.util import Record
 from skimage.transform import resize
 
+def spread_image(x, nrow, ncol, height, width):
+    return tf.reshape(
+        tf.transpose(
+            tf.reshape(x, (nrow, ncol, height, width, -1))
+            , (0, 2, 1, 3, 4))
+        , (1, nrow * height, ncol * width, -1))
+
 def batch(path, batch_size, seed=26, channel_first=False):
     """batch function to use with pipe"""
     ds = h5py.File(path, 'r')

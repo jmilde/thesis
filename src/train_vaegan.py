@@ -1,4 +1,4 @@
-from src.util_tf import batch_resize, batch, pipe
+from src.util_tf import batch_resize, batch, pipe, spread_image
 from src.util_io import pform
 from src.models.vae_gan import VAEGAN
 import numpy as np
@@ -37,13 +37,15 @@ def main():
     img_dim = RESIZE_SIZE + [INPUT_CHANNELS]
 
 
-    epochs = 50
+    epochs     = 50
     batch_size = 32
     #warmup = ds_size//batch_size//2 # no latent loss for the first half epoch
     accelerate = (ds_size//batch_size)*1.5 # after warmup takes ~3 epochs until latent loss is considered 100%
     logfrq = ds_size//100//batch_size # log ~100x epoch
+    loss_latent_scaling = 1
+    loss_rec_scaling = 1
 
-
+    # encoding
     btlnk = 800
     channels = [64, 128, 256, 512, 512]
 
@@ -51,7 +53,7 @@ def main():
 
     #ds_size = len(np.load(path_data)['imgs'])
 
-    model_name = f"vaeGan-{RESIZE_SIZE}-e{epochs}-b{batch_size}-btlnk{btlnk}-{channels}"
+    model_name = f"no_gan_vaeGan-{RESIZE_SIZE}-e{epochs}-b{batch_size}-btlnk{btlnk}-{channels}"
     path_ckpt  = path_ckpt+model_name
     #pipeline
 
@@ -66,7 +68,9 @@ def main():
                    batch_size,
                    accelerate = accelerate,
                    normalizer_enc = tf.keras.layers.BatchNormalization,
-                   normalizer_dec = tf.keras.layers.BatchNormalization,)
+                   normalizer_dec = tf.keras.layers.BatchNormalization,
+                   loss_latent_scaling = loss_latent_scaling,
+                   loss_rec_scaling    = loss_rec_scaling,)
     #model = tf.keras.models.Model(inpt, architecture(inpt))
 
 
@@ -101,22 +105,29 @@ def main():
             # logging
             if step%logfrq==0:
                 with writer.as_default():
-                    tf.summary.image( "original"     , output["x"].numpy()            , step=step, max_outputs=2)
-                    tf.summary.image( "x_rec"        , output["x_rec"].numpy()        , step=step, max_outputs=2)
-                    tf.summary.image( "x_noise"      , output["x_noise"].numpy()      , step=step, max_outputs=2)
-                    tf.summary.scalar("d_loss"       , output["d_loss"].numpy()       , step=step)
-                    tf.summary.scalar("g_loss"       , output["g_loss"].numpy()       , step=step)
-                    tf.summary.scalar("e_loss"       , output["e_loss"].numpy()       , step=step)
-                    tf.summary.scalar("gx_rec_loss"  , output["gx_rec_loss"].numpy()  , step=step)
-                    tf.summary.scalar("dx_loss"      , output["dx_loss"].numpy()      , step=step)
-                    tf.summary.scalar("dx_rec_loss"  , output["dx_rec_loss"].numpy()  , step=step)
-                    tf.summary.scalar("dx_noise_loss", output["dx_noise_loss"].numpy(), step=step)
-                    tf.summary.scalar("loss_rec"     , output["loss_rec"].numpy()     , step=step)
-                    tf.summary.scalar("loss_latent"  , output["loss_latent"].numpy()  , step=step)
-                    tf.summary.scalar("lv"           , output["lv"].numpy()           , step=step)
-                    tf.summary.scalar("mu"           , output["mu"].numpy()           , step=step)
-                    tf.summary.scalar("rate_anneal"  , output["rate_anneal"].numpy()  , step=step)
-                    tf.summary.scalar("lr_balancer"  , output["lr_balancer"].numpy()  , step=step)
+                    tf.summary.image( "x",
+                                      spread_image(output["x"].numpy()[:16],4,4,RESIZE_SIZE[0],RESIZE_SIZE[1]),
+                                      step=step)
+                    tf.summary.image( "x_rec",
+                                      spread_image(output["x_rec"].numpy()[:16],4,4,RESIZE_SIZE[0],RESIZE_SIZE[1]),
+                                      step=step)
+                    tf.summary.image( "x_noise",
+                                      spread_image(output["x_noise"].numpy()[:16],4,4,RESIZE_SIZE[0],RESIZE_SIZE[1]),
+                                      step=step)
+                    tf.summary.scalar("d_loss"        , output["d_loss"].numpy()        , step=step)
+                    tf.summary.scalar("g_loss"        , output["g_loss"].numpy()        , step=step)
+                    tf.summary.scalar("e_loss"        , output["e_loss"].numpy()        , step=step)
+                    tf.summary.scalar("gx_rec_loss"   , output["gx_rec_loss"].numpy()   , step=step)
+                    tf.summary.scalar("gx_noise_loss" , output["gx_noise_loss"].numpy() , step=step)
+                    tf.summary.scalar("dx_loss"       , output["dx_loss"].numpy()       , step=step)
+                    tf.summary.scalar("dx_rec_loss"   , output["dx_rec_loss"].numpy()   , step=step)
+                    tf.summary.scalar("dx_noise_loss" , output["dx_noise_loss"].numpy() , step=step)
+                    tf.summary.scalar("loss_rec"      , output["loss_rec"].numpy()      , step=step)
+                    tf.summary.scalar("loss_latent"   , output["loss_latent"].numpy()   , step=step)
+                    tf.summary.scalar("lv"            , output["lv"].numpy()            , step=step)
+                    tf.summary.scalar("mu"            , output["mu"].numpy()            , step=step)
+                    tf.summary.scalar("rate_anneal"   , output["rate_anneal"].numpy()   , step=step)
+                    tf.summary.scalar("lr_balancer"   , output["lr_balancer"].numpy()   , step=step)
                     writer.flush()
 
         # save model every epoch

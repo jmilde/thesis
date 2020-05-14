@@ -46,7 +46,7 @@ class VAE(tf.keras.Model):
         loss_latent = tf.reduce_mean(0.5 * (tf.square(mu) + tf.exp(lv) - lv - 1.0))
 
         # reconstruction loss
-        loss_rec =  tf.reduce_mean(tf.reduce_sum(tf.math.square(x-x_rec), axis=0))
+        loss_rec =  tf.reduce_mean(tf.math.square(x-x_rec))
 
 
         loss = loss_rec + loss_latent*rate_anneal
@@ -71,7 +71,8 @@ class VAE(tf.keras.Model):
 
 
 class Encoder(tf.keras.layers.Layer):
-    def __init__(self, channels=[64, 128, 256, 512, 512, 512],
+    def __init__(self,
+                 channels=[64, 128, 256, 512, 512, 512],
                  normalizer=tf.keras.layers.BatchNormalization,
                  name="Encoder",
                  **kwargs):

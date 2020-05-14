@@ -1,4 +1,4 @@
-from src.util_tf import batch_resize, batch, pipe
+from src.util_tf import batch_resize, batch, pipe, spread_image
 from src.util_io import pform
 from src.models.vae import VAE
 import numpy as np
@@ -51,7 +51,7 @@ def main():
 
     #ds_size = len(np.load(path_data)['imgs'])
 
-    model_name = f"vae_res-{RESIZE_SIZE}-e{epochs}-b{batch_size}-btlnk{btlnk}-{channels}"
+    model_name = f"vae_fixed_mse-{RESIZE_SIZE}-e{epochs}-b{batch_size}-btlnk{btlnk}-{channels}"
     path_ckpt  = path_ckpt+model_name
     #pipeline
 
@@ -99,10 +99,14 @@ def main():
             # logging
             if step%logfrq==0:
                 with writer.as_default():
-                    tf.summary.image("original", output["x"].numpy(), step=step, max_outputs=2)
-                    tf.summary.image("reconstruction", output["x_rec"].numpy(), step=step, max_outputs=2)
+                    tf.summary.image( "x"    ,
+                                      spread_image(output["x"].numpy()[:16],4,4,RESIZE_SIZE[0],RESIZE_SIZE[1]),
+                                      step=step)
+                    tf.summary.image( "x_rec",
+                                      spread_image(output["x_rec"].numpy()[:16],4,4,RESIZE_SIZE[0],RESIZE_SIZE[1]) ,
+                                      step=step)
                     tf.summary.scalar("loss", output["loss"].numpy(), step=step)
-                    tf.summary.scalar("loss_mse", output["loss_rec"].numpy(), step=step)
+                    tf.summary.scalar("loss_rec", output["loss_rec"].numpy(), step=step)
                     tf.summary.scalar("loss_latent", output["loss_latent"].numpy(), step=step)
                     tf.summary.scalar("lv", output["lv"].numpy(), step=step)
                     tf.summary.scalar("mu", output["mu"].numpy(), step=step)

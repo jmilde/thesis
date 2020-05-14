@@ -8,6 +8,8 @@ class VAEGAN(tf.keras.Model):
                  normalizer_enc=tf.keras.layers.BatchNormalization,
                  normalizer_dec=tf.keras.layers.BatchNormalization,
                  name="VAE",
+                 loss_latent_scaling=10,
+                 loss_rec_scaling=100,
                  **kwargs):
         super(VAEGAN, self).__init__(name=name, **kwargs)
 
@@ -15,15 +17,18 @@ class VAEGAN(tf.keras.Model):
         self.inpt_dim   = inpt_dim
         self.btlnk      = btlnk
         self.batch_size = batch_size
+        self.loss_latent_scaling = loss_latent_scaling
+        self.loss_rec_scaling    = loss_rec_scaling
+
         # encoding
         self.inpt_layer = tf.keras.layers.InputLayer(inpt_dim)
-        self.encoder = Encoder(channels, btlnk, normalizer=normalizer_enc)
+        self.encoder    = Encoder(channels, btlnk, normalizer=normalizer_enc)
 
         # generating
         self.generator = Generator(inpt_dim, channels[::-1], normalizer=normalizer_dec)
 
         # descriminating
-        self.discriminator = Discriminator(channels, normalizer=normalizer_enc)
+        self.discriminator  = Discriminator(channels, normalizer=normalizer_enc)
         self.d_scale_factor = tf.constant(0.1)
 
         # optimizers
@@ -77,8 +82,8 @@ class VAEGAN(tf.keras.Model):
 
 
         d_loss = dx_loss + (dx_rec_loss + dx_noise_loss)/2
-        g_loss = (gx_rec_loss + gx_noise_loss)/2 + loss_rec*10
-        e_loss = loss_rec*10 + loss_latent
+        g_loss = (gx_rec_loss + gx_noise_loss)/2 + loss_rec*self.loss_rec_scaling
+        e_loss = loss_rec*self.loss_rec_scaling + loss_latent*self.loss_latent_scaling
 
         self.lr_balancer = sigmoid(dx_rec_loss - gx_rec_loss, mult=10)
 
@@ -90,6 +95,7 @@ class VAEGAN(tf.keras.Model):
                 "e_loss": e_loss,
                 "lr_balancer": self.lr_balancer,
                 "gx_rec_loss": gx_rec_loss,
+                "gx_noise_loss": gx_rec_loss,
                 "dx_loss": dx_loss,
                 "dx_rec_loss": dx_rec_loss,
                 "dx_noise_loss": dx_noise_loss,
@@ -163,9 +169,9 @@ class Encoder(tf.keras.layers.Layer):
                                          padding="same",
                                          use_bias=False,
                                          activation="relu"),
-                  normalizer(),
-                  tf.keras.layers.ReLU(),
-                  tf.keras.layers.AveragePooling2D()]
+                       normalizer(),
+                       tf.keras.layers.ReLU(),
+                       tf.keras.layers.AveragePooling2D()]
 
         for i, channel in enumerate(channels[1:], 1):
             adjust = channel!=channels[i-1]

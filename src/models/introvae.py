@@ -3,19 +3,19 @@ from src.util import Record
 from src.util_tf import ResBlock, VariationalEncoding, downsampling_res_block, upsampling_res_block, sigmoid
 
 class INTROVAE(tf.keras.Model):
-    def __init__(self, inpt_dim, channels, btlnk, batch_size,
+    def __init__(self, inpt_dim, cond_dim, channels, btlnk, batch_size,
                  normalizer_enc=tf.keras.layers.BatchNormalization,
                  normalizer_dec=tf.keras.layers.BatchNormalization,
                  name="Introvae",
                  weight_rec=1,
                  weight_kl=1,
-                 weight_neg = 1
-                 m_plus = 100
+                 weight_neg = 1,
+                 m_plus = 120,
                  lr_enc= 0.0002,
                  lr_dec= 0.0002,
-                 beta1 = 0.5
+                 beta1 = 0.5,
                  **kwargs):
-        super(VAEGAN, self).__init__(name=name, **kwargs)
+        super(INTROVAE, self).__init__(name=name, **kwargs)
 
         self.inpt_dim   = inpt_dim
         self.btlnk      = btlnk
@@ -26,6 +26,7 @@ class INTROVAE(tf.keras.Model):
         self.m_plus     = m_plus
         # encoding
         self.inpt_layer = tf.keras.layers.InputLayer(inpt_dim)
+        self.inpt_layer_cond = tf.keras.layers.InputLayer(cond_dim)
         self.encoder    = Encoder(channels, btlnk, normalizer=normalizer_enc)
 
         # decoding
@@ -49,13 +50,13 @@ class INTROVAE(tf.keras.Model):
         return  tf.reduce_mean(tf.reduce_sum(tf.math.square(x-x_rec), -1))
 
 
-    def vae_step(x):
+    def vae_step(self, x, training=True):
         x         = self.inpt_layer(x)
         z, mu, lv = self.encode(x, training=training)  # encode real image
-        x_rec     = self.decode(z, training=training)  # reconstruct real image
+        x_rec     = self.decode(z, z_cond, training=training)  # reconstruct real image
 
         # kl loss
-        kl_real = self.kl_loss(mu, lv)
+        loss_kl = self.kl_loss(mu, lv)
 
         # reconstruction loss
         loss_rec =  self.mse_loss(x, x_rec)
@@ -64,27 +65,29 @@ class INTROVAE(tf.keras.Model):
 
         return {"x":x,
                 "x_rec": x_rec,
-                "kl_real": kl_real,
+                "loss": loss,
+                "loss_kl": loss_kl,
                 "loss_rec": loss_rec}
 
 
     @tf.function
     def train_vae(self, x):
         with tf.GradientTape() as tape:
-            output = self.vae_step(x, training = True)
+            output = self.vae_step(x, training=True)
             loss = output["loss"]
         self.optimizer_enc.apply_gradients(zip(tape.gradient(loss, self.trainable_variables), self.trainable_variables))
         return output
 
     def call(self, x, training=True):
-        x     = self.inpt_layer(x)
+        x     = self.inpt_layer(x[0])
+        z_cond  = self.inpt_layer_cond(x[1])
         noise = tf.random.normal((self.batch_size, self.btlnk), 0, 1)#
 
         z, mu, lv = self.encode(x, training=training)  # encode real image
-        x_rec     = self.decode(z, training=training)  # reconstruct real image
+        x_rec     = self.decode(z, z_cond, training=training)  # reconstruct real image
         _, mu_rec, lv_rec = self.encode(tf.stop_gradient(x_rec)) # encode reconstruction
 
-        x_fake = self.decode(noise, training=training) # generate fake from noise
+        x_fake = self.decode(noise, z_cond, training=training) # generate fake from noise
         _, mu_fake, lv_fake = self.encode(tf.stop_gradient(x_fake)) # encode fake
 
 
@@ -100,7 +103,7 @@ class INTROVAE(tf.keras.Model):
         loss_rec =  self.mse_loss(x, x_rec)
 
         # margin loss
-        loss_margin = kl_real + 0.5*(tf.keras.layers.Relu(self.m_plus - kl_rec) + tf.keras.layers.Relu(self.m_plus-kl_fake) ) *self.weight_neg
+        loss_margin = kl_real + 0.5*(tf.keras.layers.ReLU(self.m_plus - kl_rec) + tf.keras.layers.ReLU(self.m_plus-kl_fake) ) *self.weight_neg
 
         loss_enc = loss_rec * self.weight_rec + loss_margin * self.weight_kl
         loss_dec = 0.5*(kl_rec + kl_fake) * self.weight_kl
@@ -143,9 +146,6 @@ class Encoder(tf.keras.layers.Layer):
                  **kwargs):
         super(Encoder, self).__init__(name=name, **kwargs)
 
-        assert (2 ** len(channels)) * 4 == image_size
-
-
         self.layers = [tf.keras.layers.Conv2D(channels[0],
                                          kernel_size=5,
                                          strides=1,
@@ -184,12 +184,15 @@ class Decoder(tf.keras.layers.Layer):
         xy_dim = inpt_dim[1]/(2**len(channels)) #wh
         self.dec_reshape_dim = (-1, int(xy_dim), int(xy_dim), channels[0])
 
+        # dense cond
+        self.dense_cond = tf.keras.layers.Dense(channels[0],name="dense_resize")
+
         # dense layer to resize and reshape input
         self.dense_resize = tf.keras.layers.Dense(xy_dim*xy_dim*channels[0],name="dense_resize")
-        self.relu = tf.keras.layers.Relu()
+        self.relu = tf.keras.layers.ReLU()
 
         self.layers = []
-        self.layers.append(ResBlock(channels[0], adjust_channels=adjust))
+        self.layers.append(ResBlock(channels[0]))
         self.layers.append(tf.keras.layers.UpSampling2D(size=(2,2)))
 
         for i,channel in enumerate(channels[1:], 1):
@@ -204,8 +207,9 @@ class Decoder(tf.keras.layers.Layer):
                                                       use_bias = False,
                                                       padding="same"))
 
-    def call(self, x, training=False):
-        x = tf.reshape(self.relu(self.dense_resize(x)), self.dec_reshape_dim)
+    def call(self, x, cond, training=False):
+        cond = self.relu(self.dense_cond(cond))
+        x = tf.reshape(self.relu(self.dense_resize(tf.concat(x, cond))), self.dec_reshape_dim)
         for layer in self.layers:
             x = layer(x, training=training)
         return x

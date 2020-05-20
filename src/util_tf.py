@@ -146,7 +146,7 @@ def sigmoid(x, shift=0.0, mult=20):
     return tf.constant(1.0) / (tf.constant(1.0) + tf.exp(-tf.constant(1.0) * (x * mult)))
 
 class ResBlock(tf.keras.layers.Layer):
-    def __init__(self, nr_filters, adjust_channels=False, normalizer=tf.keras.layers.BatchNormalization, activation=tf.keras.layers.LeakyRelu(alpha=0.2)):
+    def __init__(self, nr_filters, adjust_channels=False, normalizer=tf.keras.layers.BatchNormalization, activation=tf.keras.layers.LeakyReLU(alpha=0.2)):
         super(ResBlock, self).__init__(name='ResBlock')
 
 

@@ -6,6 +6,13 @@ from src.util_np import sample
 from src.util import Record
 from skimage.transform import resize
 
+def spread_image(x, nrow, ncol, height, width):
+    return tf.reshape(
+        tf.transpose(
+            tf.reshape(x, (nrow, ncol, height, width, -1))
+            , (0, 2, 1, 3, 4))
+        , (1, nrow * height, ncol * width, -1))
+
 def batch(path, batch_size, seed=26, channel_first=False):
     """batch function to use with pipe"""
     ds = h5py.File(path, 'r')
@@ -21,6 +28,31 @@ def batch(path, batch_size, seed=26, channel_first=False):
         else:
             b.append(resize(np.rollaxis(data[i], 0, 3), (384,384))/255)
 
+def batch_resize(path, batch_size, size=(64,64), seed=26):
+    """batch function to use with pipe"""
+    ds     = h5py.File(path, 'r')
+    data   = ds["data"]
+    shapes = ds["shapes"]
+    b = []
+    for i in sample(len(data), seed):
+        if batch_size == len(b):
+            yield np.array(b, dtype=np.float32)
+            b = []
+        shape = shapes[i]
+        b.append(resize(np.rollaxis(data[i][:,:shape[1], :shape[2]],0,3), size)/255)
+
+def batch_resized(path, batch_size, seed=26, channel_first=False):
+    """batch function to use with pipe"""
+    data = np.load(path)["imgs"]
+    b = []
+    for i in sample(len(data), seed):
+        if batch_size == len(b):
+            yield np.array(b, dtype=np.float32)
+            b = []
+        if channel_first:
+            b.append(np.rollaxis(data[i], 0, 3)/255)
+        else:
+            b.append(data[i]/255)
 
 def pipe(generator, output_types, prefetch=1, repeat=-1, name='pipe', **kwargs):
     """see `tf.data.Dataset.from_generator`."""
@@ -30,34 +62,149 @@ def pipe(generator, output_types, prefetch=1, repeat=-1, name='pipe', **kwargs):
                           .__iter__()
 
 
-class ResBlock(Record):
-    def __init__(self, nr_filters):
-            self.relu = tf.keras.layers.ReLU()
-            self.conv1 = tf.keras.layers.Conv2D(nr_filters, kernel_size=3, padding="same")
-            self.conv2 = tf.keras.layers.Conv2D(nr_filters, kernel_size=3, padding="same")
+class downsampling_conv_block(Record):
+    def __init__(self, filters, norm_func, strides=2, kernel_size=4):
+        self.conv = tf.keras.layers.Conv2D(filters, kernel_size=kernel_size, strides=strides, padding="same", use_bias=False)
+        self.norm = norm_func()
+        self.relu = tf.keras.layers.ReLU()
 
     def __call__(self, inpt):
-        with tf.name_scope("ResBlock") as scope:
-            x = self.conv1(inpt)
+        with tf.name_scope("downsampling_block") as scope:
+            x = self.conv(inpt)
+            x = self.norm(x)
             x = self.relu(x)
-            x = self.conv2(x)
-            x = self.relu(x+inpt)
-            return x
+        return x
 
-
-class VariationalEncoding(Record):
-    def __init__(self, btlnk):
+class upsampling_conv_block(Record):
+    def __init__(self, filters, norm_func, strides=2, kernel_size=4):
+        self.conv = tf.keras.layers.Conv2DTranspose(filters, kernel_size=4,strides=2, padding="same")
+        self.norm = norm_func()
         self.relu = tf.keras.layers.ReLU()
-        self.flatten = tf.keras.layers.Flatten(data_format="channels_first")
-        self.dense_btlnk = tf.keras.layers.Dense(btlnk)
-        self.normalize = tf.keras.layers.LayerNormalization()
+
+    def __call__(self, inpt):
+        with tf.name_scope("upsampling_block") as scope:
+            x = self.conv(inpt)
+            x = self.norm(x)
+            x = self.relu(x)
+        return x
+
+
+class downsampling_res_block(Record):
+    def __init__(self, filters, normalizer, strides=2, kernel_size=3):
+        self.relu = tf.keras.layers.ReLU()
+        self.conv_down1 = tf.keras.layers.Conv2D(filters, kernel_size=kernel_size, strides=strides, padding="same")
+        self.normalize_down1 = normalizer()
+
+        self.conv_down2 = tf.keras.layers.Conv2D(filters, kernel_size=kernel_size,strides=strides, padding="same")
+        self.normalize_down2 = normalizer()
+        self.conv = tf.keras.layers.Conv2D(filters, kernel_size=kernel_size, padding="same")
+        self.normalize = normalizer()
+
+
+    def __call__(self, inpt):
+        with tf.name_scope("upsampling_block") as scope:
+            skip = self.conv_down1(inpt)
+            #skip = self.normalize_down1(skip)
+
+            x = self.conv_down2(inpt)
+            # x = self.normalize_down2()
+            x = self.relu(x)
+            x = self.conv(x)
+            #x = self.normalize(x)
+
+            x = self.relu(x + skip)
+        return x
+
+class upsampling_res_block(Record):
+    def __init__(self, filters, normalizer, strides=2, kernel_size=3):
+        self.relu = tf.keras.layers.ReLU()
+        self.conv_up1 = tf.keras.layers.Conv2DTranspose(filters, kernel_size=kernel_size, strides=strides, padding="same")
+        self.normalize_up1 = normalizer()
+
+        self.conv_up2 = tf.keras.layers.Conv2DTranspose(filters, kernel_size=kernel_size,strides=strides, padding="same")
+        self.normalize_up2 = normalizer()
+        self.conv = tf.keras.layers.Conv2D(filters, kernel_size=kernel_size, padding="same")
+        self.normalize = normalizer()
+
+
+    def __call__(self, inpt):
+        with tf.name_scope("upsampling_block") as scope:
+            skip = self.conv_up1(inpt)
+            #skip = self.normalize_up1(skip)
+
+            x = self.conv_up2(inpt)
+            #x = self.normalize_up2(x)
+            x = self.relu(x)
+            x = self.conv(x)
+            #x = self.normalize(x)
+
+            x = self.relu(x + skip)
+        return x
+
+def sigmoid(x, shift=0.0, mult=20):
+    """ squashes a value with a sigmoid"""
+    return tf.constant(1.0) / (tf.constant(1.0) + tf.exp(-tf.constant(1.0) * (x * mult)))
+
+class ResBlock(tf.keras.layers.Layer):
+    def __init__(self, nr_filters, adjust_channels=False, normalizer=tf.keras.layers.BatchNormalization, activation=tf.keras.layers.LeakyReLU(alpha=0.2)):
+        super(ResBlock, self).__init__(name='ResBlock')
+
+
+        if adjust_channels: self.adjust = tf.keras.layers.Conv2D(nr_filters, kernel_size=1, padding="same", use_bias=False)
+        else: self.adjust = None
+
+        self.activation = activation
+        self.conv1 = tf.keras.layers.Conv2D(nr_filters, kernel_size=3, padding="same", use_bias=False)
+        self.normalize1 = normalizer()
+        self.conv2 = tf.keras.layers.Conv2D(nr_filters, kernel_size=3, padding="same", use_bias=False)
+        self.normalize2 = normalizer()
+
+    def call(self, inpt):
+        with tf.name_scope("ResBlock") as scope:
+            if self.adjust: inpt = self.adjust(inpt)
+            x = self.conv1(inpt)
+            x = self.normalize1(x)
+            x = self.activation(x)
+            x = self.conv2(x)
+            x = self.activation(self.normalize2(x+inpt))
+        return x
+
+#class ResBlock(Record):
+#    def __init__(self, nr_filters, normalizer=tf.keras.layers.BatchNormalization):
+#            self.relu = tf.keras.layers.ReLU()
+#            self.conv1 = tf.keras.layers.Conv2D(nr_filters, kernel_size=3, padding="same")
+#            self.normalize1 = normalizer()
+#            self.conv2 = tf.keras.layers.Conv2D(nr_filters, kernel_size=3, padding="same")
+#            self.normalize2 = normalizer()
+#
+#    def __call__(self, inpt):
+#        with tf.name_scope("ResBlock") as scope:
+#            x = self.conv1(inpt)
+#            #x = self.normalize1(x)
+#            x = self.relu(x)
+#            x = self.conv2(x)
+#            #x = self.normalize2(x)
+#            x = self.relu(x+inpt)
+#        return x
+
+
+class VariationalEncoding(tf.keras.layers.Layer):
+    def __init__(self, btlnk,
+                 name="VariationalEncoding",
+                 **kwargs):
+        super(VariationalEncoding, self).__init__(name=name, **kwargs)
+        self.relu = tf.keras.layers.ReLU()
+        self.flatten = tf.keras.layers.Flatten(data_format="channels_last")
+        #self.dense_btlnk = tf.keras.layers.Dense(btlnk)
+        #self.normalize = tf.keras.layers.LayerNormalization()
         self.dense_mu = tf.keras.layers.Dense(btlnk)
         self.dense_lv = tf.keras.layers.Dense(btlnk)
 
-    def __call__(self, x):
+    def call(self, x, training=True):
         with tf.name_scope("variational") as scope:
             x = self.flatten(x)
-            x = self.normalize(self.relu(self.dense_btlnk(x)))
+            #x = self.relu(self.dense_btlnk(x))
+            #x = self.normalize()
             with tf.name_scope("latent") as scope:
                 mu = self.dense_mu(x)
                 lv = self.dense_lv(x)

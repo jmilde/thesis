@@ -61,4 +61,4 @@ def prep_data():
 
 if __name__=="__main__":
     prep_data()
-    prep_color()
+    #prep_color()

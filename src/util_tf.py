@@ -36,10 +36,11 @@ def batch_resize(path, batch_size, size=(64,64), seed=26):
     b = []
     for i in sample(len(data), seed):
         if batch_size == len(b):
-            yield np.array(b, dtype=np.float32)
+            yield np.array(b), np.array(a)
             b = []
         shape = shapes[i]
         b.append(resize(np.rollaxis(data[i][:,:shape[1], :shape[2]],0,3), size)/255)
+
 
 def batch_resized(path, batch_size, seed=26, channel_first=False):
     """batch function to use with pipe"""
@@ -54,9 +55,26 @@ def batch_resized(path, batch_size, seed=26, channel_first=False):
         else:
             b.append(data[i]/255)
 
-def pipe(generator, output_types, prefetch=1, repeat=-1, name='pipe', **kwargs):
+
+def batch_resize_cond(path, path_cond, batch_size, size=(64,64), seed=26):
+    """batch function to use with pipe"""
+    ds     = h5py.File(path, 'r')
+    data   = ds["data"]
+    shapes = ds["shapes"]
+    conds = np.load(path_cond, allow_pickle=True)["colors"]
+    b, c = [], []
+    for i in sample(len(data), seed):
+        if batch_size == len(b):
+            yield np.array(b), np.array(c)
+            b, c = [], []
+        shape = shapes[i]
+        b.append(resize(np.rollaxis(data[i][:,:shape[1], :shape[2]],0,3), size)/255)
+        c.append(conds[i])
+
+
+def pipe(generator, output_types, output_shapes=None, prefetch=1, repeat=-1, name='pipe', **kwargs):
     """see `tf.data.Dataset.from_generator`."""
-    return tf.data.Dataset.from_generator(generator, output_types) \
+    return tf.data.Dataset.from_generator(generator, output_types,) \
                           .repeat(repeat) \
                           .prefetch(prefetch) \
                           .__iter__()

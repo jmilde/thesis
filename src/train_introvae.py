@@ -1,4 +1,4 @@
-from src.util_tf import batch_resize, batch, pipe, spread_image
+from src.util_tf import batch_resize, batch_resize_cond, batch, pipe, spread_image
 from src.util_io import pform
 from src.models.introvae import INTROVAE
 import numpy as np
@@ -24,6 +24,7 @@ def main():
         tf.config.experimental.set_memory_growth(gpus[0], True)
 
     path_data = expanduser('~/data/LLD-logo.hdf5')
+    path_cond = expanduser('~/data/color_conditional.npz')
     path_log  = expanduser("~/cache/tensorboard-logdir/")
     path_ckpt = expanduser('./ckpt/')
 
@@ -35,11 +36,10 @@ def main():
     ds_size = len(h5py.File(path_data, 'r')['data'])
     INPUT_CHANNELS = 3
     img_dim = RESIZE_SIZE + [INPUT_CHANNELS]
-
-    epochs     = 500
+    cond_dim = len(np.load(path_cond, allow_pickle=True)["colors"][1])
+    epochs     = 50
     batch_size = 16
     logfrq = ds_size//100//batch_size # log ~100x per epoch
-
     vae_epochs = 0 # pretrain only vae
     btlnk = 512
     channels = [32, 64, 128, 256, 512, 512]
@@ -49,24 +49,23 @@ def main():
     weight_rec = 0.05
     weight_kl  = 1
     weight_neg = 0.5 #alpha 0.1-0.5
-    m_plus     = 120 #  should be selected according to the value of β, to balance adveseiral loss
-
+    m_plus     = 120 #  should be selected according to the value of β, to balance adveserial loss
     lr_enc= 0.0001
     lr_dec= 0.0001
     beta1 = 0.5
-
-    model_name = f"I-pre{vae_epochs}-{','.join(str(x) for x in RESIZE_SIZE)}-m{m_plus}-lr{lr_enc}"
+    model_name = f"Icond-pre{vae_epochs}-{','.join(str(x) for x in RESIZE_SIZE)}-m{m_plus}-lr{lr_enc}"
     path_ckpt  = path_ckpt+model_name
 
-    #restore_model = model_name + "_VAEpretrain"
-
     #pipeline
-    bg = batch_resize(path_data, batch_size, RESIZE_SIZE)
-    data = pipe(lambda: bg, (tf.float32), prefetch=6)
+    #bg = batch_resize(path_data, batch_size, RESIZE_SIZE)
+    #data = pipe(lambda: bg, (tf.float32), prefetch=6)
+    bg = batch_resize_cond(path_data, path_cond, batch_size, RESIZE_SIZE)
+    data = pipe(lambda: bg, (tf.float32, tf.float32), (tf.TensorShape([None, None, None, None]), tf.TensorShape([None, None])), prefetch=6)
 
 
     # model
     model = INTROVAE(img_dim,
+                     cond_dim,
                      channels,
                      btlnk,
                      batch_size,
@@ -94,7 +93,7 @@ def main():
                                net=model)
 
     if restore_model:
-        manager = tf.train.CheckpointManager(ckpt, path_ckpt, max_to_keep=3, checkpoint_name=restore_model)
+        manager = tf.train.CheckpointManager(ckpt, path_ckpt, checkpoint_name=restore_model)
         ckpt.restore(manager.latest_checkpoint)
         print("\nmodel restored\n")
 

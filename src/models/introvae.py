@@ -3,7 +3,7 @@ from src.util import Record
 from src.util_tf import ResBlock, VariationalEncoding, downsampling_res_block, upsampling_res_block, sigmoid
 
 class INTROVAE(tf.keras.Model):
-    def __init__(self, inpt_dim, channels, btlnk, batch_size,
+    def __init__(self, inpt_dim, cond_dim, channels, btlnk, batch_size,
                  normalizer_enc=tf.keras.layers.BatchNormalization,
                  normalizer_dec=tf.keras.layers.BatchNormalization,
                  name="Introvae",
@@ -26,8 +26,10 @@ class INTROVAE(tf.keras.Model):
         self.m_plus     = m_plus
 
         # encoding
-        self.inpt_layer = tf.keras.layers.InputLayer(inpt_dim)
-        self.encoder    = Encoder(channels, btlnk, normalizer=normalizer_enc)
+        self.inpt_layer      = tf.keras.layers.InputLayer(inpt_dim)
+        self.inpt_layer_cond = tf.keras.layers.InputLayer(cond_dim)
+        print(self.inpt_layer_cond)
+        self.encoder         = Encoder(channels, btlnk, normalizer=normalizer_enc)
 
         # decoding
         self.decoder= Decoder(inpt_dim, channels[::-1], normalizer=normalizer_dec)
@@ -41,8 +43,8 @@ class INTROVAE(tf.keras.Model):
         z, mu, lv = self.encoder(x)
         return z, mu, lv
 
-    def decode(self, x, training=False):
-        return self.decoder(x)
+    def decode(self, x, cond, training=False):
+        return self.decoder(x, cond)
 
     def kl_loss(self, mu, lv):
         #my_kl =  tf.reduce_mean(0.5 * (tf.square(mu) + tf.exp(lv) - lv - 1.0))
@@ -56,10 +58,13 @@ class INTROVAE(tf.keras.Model):
             return tf.reduce_sum(x)
 
 
-    def vae_step(self, x, training=True):
-        x         = self.inpt_layer(x)
+    def vae_step(self, inpt, training=True):
+        print(inpt.shape)
+        x         = self.inpt_layer(inpt[0])
+        z_cond = self.inpt_layer_cond(inpt[1])
+
         z, mu, lv = self.encode(x, training=training)  # encode real image
-        x_rec     = self.decode(z, training=training)  # reconstruct real image
+        x_rec     = self.decode(z, z_cond, training=training)  # reconstruct real image
 
         # kl loss
         loss_kl = self.kl_loss(mu, lv)
@@ -69,7 +74,7 @@ class INTROVAE(tf.keras.Model):
 
         loss = loss_rec+loss_kl
 
-        return {"x":x,
+        return {"x":inpt,
                 "x_rec": x_rec,
                 "loss": loss,
                 "loss_kl": loss_kl,
@@ -84,13 +89,16 @@ class INTROVAE(tf.keras.Model):
         self.optimizer_enc.apply_gradients(zip(tape.gradient(loss, self.trainable_variables), self.trainable_variables))
         return output
 
-    def call(self, x, training=True):
+    def call(self, inpt, training=True):
 
-        x     = self.inpt_layer(x)
+        # inputs
+        x     = self.inpt_layer(inpt[0])
+        z_cond = self.inpt_layer_cond(inpt[1])
+        z_p = tf.random.normal((self.batch_size, self.btlnk), 0, 1)
+
         z, mu, lv = self.encode(x, training=training)  # encode real image
-        z_p = tf.random.normal((self.batch_size, self.btlnk), 0, 1)#
-        x_r     = self.decode(z, training=training)  # reconstruct real image
-        x_p = self.decode(z_p, training=training) # generate fake from z_p
+        x_r     = self.decode(z, z_cond, training=training)  # reconstruct real image
+        x_p = self.decode(z_p, z_cond, training=training) # generate fake from z_p
 
         # reconstruction loss
         loss_rec =  self.mse_loss(x, x_r)
@@ -195,6 +203,8 @@ class Decoder(tf.keras.layers.Layer):
         xy_dim = inpt_dim[1]/(2**len(channels)) #wh
         self.dec_reshape_dim = (-1, int(xy_dim), int(xy_dim), channels[0])
 
+        self.dense_cond = tf.keras.layers.Dense(channels[0], name="dense_conditional")
+
         # dense layer to resize and reshape input
         self.dense_resize = tf.keras.layers.Dense(xy_dim*xy_dim*channels[0],name="dense_resize")
         self.relu = tf.keras.layers.ReLU()
@@ -215,7 +225,9 @@ class Decoder(tf.keras.layers.Layer):
                                                       use_bias = False,
                                                       padding="same"))
 
-    def call(self, x, training=False):
+    def call(self, x, cond, training=False):
+        cond = self.relu(self.dense_cond(cond))
+        x=tf.concat([x, cond], 1)
         x = tf.reshape(self.relu(self.dense_resize(x)), self.dec_reshape_dim)
         for layer in self.layers:
             x = layer(x, training=training)

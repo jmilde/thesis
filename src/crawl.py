@@ -19,15 +19,17 @@ def run():
     df = pd.read_csv("./data/iconDS/searchwords.csv", header=None)
     searchwords = list(set(df[0]))
 
+    df_labels = pd.read_csv("./data/iconDS/labels.csv")
 
     labels = defaultdict(lambda : defaultdict())
-    for searchword in tqdm(searchwords[:10]):
+    for searchword in tqdm(searchwords[10:]):
         endpoint = f"http://api.thenounproject.com/icons/{searchword}?limit_to_public_domain=1&limit=1000"
         response = requests.get(endpoint, auth=auth)
         content  = response.content
         try:
             icons = json.loads(content.decode("utf-8"))["icons"]
-            for icon in tqdm(icons):
+            print(len(icons))
+            for icon in icons:
                 img_id = icon["id"]
                 img = icon["preview_url"]
                 # download img

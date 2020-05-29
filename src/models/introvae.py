@@ -3,7 +3,7 @@ from src.util import Record
 from src.util_tf import ResBlock, VariationalEncoding, downsampling_res_block, upsampling_res_block, sigmoid
 
 class INTROVAE(tf.keras.Model):
-    def __init__(self, inpt_dim, cond_dim, channels, btlnk, batch_size,
+    def __init__(self, inpt_dim, cond_dim, channels, btlnk, batch_size, cond_hdim,
                  normalizer_enc=tf.keras.layers.BatchNormalization,
                  normalizer_dec=tf.keras.layers.BatchNormalization,
                  name="Introvae",
@@ -32,7 +32,7 @@ class INTROVAE(tf.keras.Model):
         self.encoder         = Encoder(channels, btlnk, normalizer=normalizer_enc)
 
         # decoding
-        self.decoder= Decoder(inpt_dim, channels[::-1], normalizer=normalizer_dec)
+        self.decoder= Decoder(inpt_dim, cond_hdim, channels[::-1], normalizer=normalizer_dec)
 
         self.relu = tf.keras.layers.ReLU()
         # optimizers
@@ -194,6 +194,7 @@ class Encoder(tf.keras.layers.Layer):
 
 class Decoder(tf.keras.layers.Layer):
     def __init__(self, inpt_dim,
+                 cond_hdim,
                  channels=[512, 512, 512, 256, 128, 64],
                  normalizer=tf.keras.layers.BatchNormalization,
                  name="Decoder",
@@ -203,7 +204,7 @@ class Decoder(tf.keras.layers.Layer):
         xy_dim = inpt_dim[1]/(2**len(channels)) #wh
         self.dec_reshape_dim = (-1, int(xy_dim), int(xy_dim), channels[0])
 
-        self.dense_cond = tf.keras.layers.Dense(channels[0], name="dense_conditional")
+        self.dense_cond = tf.keras.layers.Dense(cond_hdim, name="dense_conditional")
 
         # dense layer to resize and reshape input
         self.dense_resize = tf.keras.layers.Dense(xy_dim*xy_dim*channels[0],name="dense_resize")

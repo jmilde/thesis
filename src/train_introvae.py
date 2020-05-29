@@ -37,6 +37,7 @@ def main():
     INPUT_CHANNELS = 3
     img_dim = RESIZE_SIZE + [INPUT_CHANNELS]
     cond_dim = len(np.load(path_cond, allow_pickle=True)["colors"][1])
+    cond_hdim = 64 #512
     epochs     = 50
     batch_size = 16
     logfrq = ds_size//100//batch_size # log ~100x per epoch
@@ -53,7 +54,7 @@ def main():
     lr_enc= 0.0001
     lr_dec= 0.0001
     beta1 = 0.5
-    model_name = f"Icond-pre{vae_epochs}-{','.join(str(x) for x in RESIZE_SIZE)}-m{m_plus}-lr{lr_enc}"
+    model_name = f"Icond{cond_hdim}-pre{vae_epochs}-{','.join(str(x) for x in RESIZE_SIZE)}-m{m_plus}-lr{lr_enc}"
     path_ckpt  = path_ckpt+model_name
 
     #pipeline
@@ -69,6 +70,7 @@ def main():
                      channels,
                      btlnk,
                      batch_size,
+                     cond_hdim,
                      normalizer_enc = tf.keras.layers.BatchNormalization,
                      normalizer_dec = tf.keras.layers.BatchNormalization,
                      weight_rec=weight_rec,

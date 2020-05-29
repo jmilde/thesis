@@ -31,6 +31,7 @@ class INTROVAE(tf.keras.Model):
         print(self.inpt_layer_cond)
         self.encoder         = Encoder(channels, btlnk, normalizer=normalizer_enc)
 
+
         # decoding
         self.decoder= Decoder(inpt_dim, cond_hdim, channels[::-1], normalizer=normalizer_dec)
 
@@ -62,7 +63,6 @@ class INTROVAE(tf.keras.Model):
         print(inpt.shape)
         x         = self.inpt_layer(inpt[0])
         z_cond = self.inpt_layer_cond(inpt[1])
-
         z, mu, lv = self.encode(x, training=training)  # encode real image
         x_rec     = self.decode(z, z_cond, training=training)  # reconstruct real image
 
@@ -103,6 +103,7 @@ class INTROVAE(tf.keras.Model):
         # reconstruction loss
         loss_rec =  self.mse_loss(x, x_r)
 
+
         # no gradient flow for encoder
         _, mu_r_, lv_r_ = self.encode(tf.stop_gradient(x_r)) # encode reconstruction
         _, mu_p_, lv_p_ = self.encode(tf.stop_gradient(x_p)) # encode fake
@@ -127,6 +128,7 @@ class INTROVAE(tf.keras.Model):
         kl_fake = self.kl_loss(mu_p, lv_p)
         loss_dec_adv = 0.5*(kl_rec + kl_fake)
         loss_dec = loss_dec_adv * self.weight_kl + loss_rec * self.weight_rec
+
 
         return {"x"        : x,
                 "x_r"      : x_r,
@@ -230,6 +232,7 @@ class Decoder(tf.keras.layers.Layer):
         cond = self.relu(self.dense_cond(cond))
         x=tf.concat([x, cond], 1)
         x = tf.reshape(self.relu(self.dense_resize(x)), self.dec_reshape_dim)
+
         for layer in self.layers:
             x = layer(x, training=training)
         return x

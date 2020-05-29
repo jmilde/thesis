@@ -55,6 +55,7 @@ def main():
     lr_dec= 0.0001
     beta1 = 0.5
     model_name = f"Icond{cond_hdim}-pre{vae_epochs}-{','.join(str(x) for x in RESIZE_SIZE)}-m{m_plus}-lr{lr_enc}"
+
     path_ckpt  = path_ckpt+model_name
 
     #pipeline
@@ -62,7 +63,6 @@ def main():
     #data = pipe(lambda: bg, (tf.float32), prefetch=6)
     bg = batch_resize_cond(path_data, path_cond, batch_size, RESIZE_SIZE)
     data = pipe(lambda: bg, (tf.float32, tf.float32), (tf.TensorShape([None, None, None, None]), tf.TensorShape([None, None])), prefetch=6)
-
 
     # model
     model = INTROVAE(img_dim,
@@ -131,6 +131,7 @@ def main():
 
     # manager for intravae training
     manager = tf.train.CheckpointManager(ckpt, path_ckpt, max_to_keep=3, checkpoint_name=model_name)
+
 
 
     # training and logging

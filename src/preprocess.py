@@ -48,7 +48,7 @@ def resize_img(img, shape):
     else:
         return resize(np.rollaxis(img[:,:shape[1], :shape[2]],0,3), (384,384)).astype("uint8")
 
-def prep_data():
+def prep_resize():
     path_data = expanduser('~/data/LLD-logo.hdf5')
     path_out  = expanduser("~/data/imgs_resized.npz")
 
@@ -60,5 +60,5 @@ def prep_data():
 
 
 if __name__=="__main__":
-    prep_data()
+    #prep_resize()
     #prep_color()

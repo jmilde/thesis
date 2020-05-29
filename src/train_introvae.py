@@ -24,6 +24,7 @@ def main():
         tf.config.experimental.set_memory_growth(gpus[0], True)
 
     path_data = expanduser('~/data/LLD-logo.hdf5')
+    path_cond = expanduser('~/data/color_conditional.npz')
     path_log  = expanduser("~/cache/tensorboard-logdir/")
     path_ckpt = expanduser('./ckpt/')
 
@@ -35,6 +36,7 @@ def main():
     ds_size = len(h5py.File(path_data, 'r')['data'])
     INPUT_CHANNELS = 3
     img_dim = RESIZE_SIZE + [INPUT_CHANNELS]
+    cond_dim = len(np.load(path_cond, allow_pickle=True)["colors"][1])
 
     epochs     = 500
     batch_size = 16
@@ -43,6 +45,7 @@ def main():
     vae_epochs = 0 # pretrain only vae
     btlnk = 512
     channels = [32, 64, 128, 256, 512, 512]
+
 
     ### loss weights
     #beta  0.01 - 100, larger β improves reconstruction quality but may influence sample diversity
@@ -56,6 +59,7 @@ def main():
     beta1 = 0.5
 
     model_name = f"I-pre{vae_epochs}-{','.join(str(x) for x in RESIZE_SIZE)}-m{m_plus}-lr{lr_enc}"
+
     path_ckpt  = path_ckpt+model_name
 
     #restore_model = model_name + "_VAEpretrain"
@@ -65,8 +69,10 @@ def main():
     data = pipe(lambda: bg, (tf.float32), prefetch=6)
 
 
+
     # model
     model = INTROVAE(img_dim,
+                     cond_dim,
                      channels,
                      btlnk,
                      batch_size,
@@ -130,6 +136,7 @@ def main():
 
     # manager for intravae training
     manager = tf.train.CheckpointManager(ckpt, path_ckpt, max_to_keep=3, checkpoint_name=model_name)
+
 
 
     # training and logging

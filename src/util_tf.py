@@ -28,6 +28,22 @@ def batch(path, batch_size, seed=26, channel_first=False):
         else:
             b.append(resize(np.rollaxis(data[i], 0, 3), (384,384))/255)
 
+def batch_resize_cond(path, path_cond, batch_size, size=(64,64), seed=26):
+    """batch function to use with pipe"""
+    ds     = h5py.File(path, 'r')
+    data   = ds["data"]
+    shapes = ds["shapes"]
+    conds = np.load(path_cond, allow_pickle=True)["colors"]
+    b = []
+    for i in sample(len(data), seed):
+        if batch_size == len(b):
+            yield np.array(b, dtype=np.float32)
+            b, c = [], []
+        shape = shapes[i]
+        b.append(resize(np.rollaxis(data[i][:,:shape[1], :shape[2]],0,3), size)/255)
+        c.append(conds[i])
+
+
 def batch_resize(path, batch_size, size=(64,64), seed=26):
     """batch function to use with pipe"""
     ds     = h5py.File(path, 'r')

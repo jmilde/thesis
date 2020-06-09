@@ -24,23 +24,22 @@ def move_through_latent(z_a, z_b, nr_steps):
 
 def run_tests(model, writer, conds, btlnk, batch_size=16, step=0):
         np.random.seed(27)
-        # create 16 images for different conditionals
 
         x_gen, zs_gen = [], []
         for cond in conds:
             x    = np.random.rand(batch_size, btlnk)
             cond_batch = np.repeat(cond[np.newaxis, :], batch_size, axis=0)
-            x_gen = model.decode(x, cond_batch)
+            x_gen.extend(model.decode(x, cond_batch))
 
             zs = move_through_latent(x[0], x[1], batch_size)
             zs_gen.extend(model.decode(zs, cond_batch))
 
         with writer.as_default():
             tf.summary.image( "x_gen",
-                              spread_image(x_gen,4,4*len(conds),RESIZE_SIZE[0],RESIZE_SIZE[1]),
+                              spread_image(x_gen,4,4*len(conds),256,256),
                               step=step)
             tf.summary.image( "zs_gen",
-                              spread_image(zs_gen,1*len(conds),16,RESIZE_SIZE[0],RESIZE_SIZE[1]),
+                              spread_image(zs_gen,1*len(conds),16,256,256),
                               step=0)
             writer.flush()
 

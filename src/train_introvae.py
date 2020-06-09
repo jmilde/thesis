@@ -51,7 +51,7 @@ def main():
     weight_rec = 0.2 #0.05
     weight_kl  = 1
     weight_neg = 0.5 #alpha 0.1-0.5
-    m_plus     = 260 #120 #  should be selected according to the value of β, to balance advaserial loss
+    m_plus     = 265 #120 #  should be selected according to the value of β, to balance advaserial loss
     lr_enc= 0.0001
     lr_dec= 0.0001
     beta1 = 0.9 #0.5
@@ -177,13 +177,13 @@ def main():
                     tf.summary.scalar("kl_rec"       , output["kl_rec"].numpy()       , step=step)
                     tf.summary.scalar("loss_enc_adv"  , output["loss_enc_adv"].numpy()  , step=step)
                     tf.summary.scalar("loss_dec_adv"  , output["loss_dec_adv"].numpy()  , step=step)
+
                     writer.flush()
 
         # save model every epoch
         save_path = manager.save()
         print(f"\nsaved model after epoch {epoch}\n")
-        run_tests(model, writer, next(data)[1][:4], btlnk, batch_size)
-
+        run_tests(model, writer, next(data)[1][:4], btlnk, batch_size=16, step=step)
 
 
 if __name__=="__main__":

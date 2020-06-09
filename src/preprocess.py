@@ -13,10 +13,6 @@ from skimage.transform import resize
 # idea:
 # 6-bit RGB palette use 2 bits for each of the red, green, and blue color components.
 # This results in a (2²)³ = 4³ = 64-color palette
-# problems: maybe a lot of the colors will be hues of white, what to do if someone selects only 1 color in inference
-#           -> maybe only add colors when the number is above a certain threshold, if only 3 numbers are high enoguh, then the rest will be filled with "white"" (1,1,1)
-#
-# options: use hsv instead of rgb
 
 def get_colors(img, shape):
     out = np.full([4,4,4],0, dtype=np.float32)

@@ -1,6 +1,7 @@
 from src.util_tf import batch_resize, batch_resize_cond, batch, pipe, spread_image
 from src.util_io import pform
 from src.models.introvae import INTROVAE
+from src.analyze_introvae import run_tests
 import numpy as np
 import h5py
 from tqdm import trange,tqdm
@@ -37,7 +38,7 @@ def main():
     INPUT_CHANNELS = 3
     img_dim = RESIZE_SIZE + [INPUT_CHANNELS]
     cond_dim = len(np.load(path_cond, allow_pickle=True)["colors"][1])
-    cond_hdim = 64 #512
+    cond_hdim  = 256 #64 #512
     epochs     = 50
     batch_size = 16
     logfrq = ds_size//100//batch_size # log ~100x per epoch
@@ -47,14 +48,15 @@ def main():
 
     ### loss weights
     #beta  0.01 - 100, larger β improves reconstruction quality but may influence sample diversity
-    weight_rec = 0.05
+    weight_rec = 0.2 #0.05
     weight_kl  = 1
     weight_neg = 0.5 #alpha 0.1-0.5
-    m_plus     = 120 #  should be selected according to the value of β, to balance adveserial loss
+    m_plus     = 265 #120 #  should be selected according to the value of β, to balance advaserial loss
     lr_enc= 0.0001
     lr_dec= 0.0001
-    beta1 = 0.5
-    model_name = f"Icond{cond_hdim}-pre{vae_epochs}-{','.join(str(x) for x in RESIZE_SIZE)}-m{m_plus}-lr{lr_enc}"
+    beta1 = 0.9 #0.5
+    model_name = f"Icond{cond_hdim}-pre{vae_epochs}-{','.join(str(x) for x in RESIZE_SIZE)}-m{m_plus}-lr{lr_enc}b{beta1}-w_rec{weight_rec}"
+
     path_ckpt  = path_ckpt+model_name
 
     #pipeline
@@ -62,7 +64,6 @@ def main():
     #data = pipe(lambda: bg, (tf.float32), prefetch=6)
     bg = batch_resize_cond(path_data, path_cond, batch_size, RESIZE_SIZE)
     data = pipe(lambda: bg, (tf.float32, tf.float32), (tf.TensorShape([None, None, None, None]), tf.TensorShape([None, None])), prefetch=6)
-
 
     # model
     model = INTROVAE(img_dim,
@@ -133,6 +134,7 @@ def main():
     manager = tf.train.CheckpointManager(ckpt, path_ckpt, max_to_keep=3, checkpoint_name=model_name)
 
 
+
     # training and logging
     step=0
     for epoch in trange(epochs, desc="epochs", position=0):
@@ -175,12 +177,13 @@ def main():
                     tf.summary.scalar("kl_rec"       , output["kl_rec"].numpy()       , step=step)
                     tf.summary.scalar("loss_enc_adv"  , output["loss_enc_adv"].numpy()  , step=step)
                     tf.summary.scalar("loss_dec_adv"  , output["loss_dec_adv"].numpy()  , step=step)
+
                     writer.flush()
 
         # save model every epoch
         save_path = manager.save()
         print(f"\nsaved model after epoch {epoch}\n")
-
+        run_tests(model, writer, next(data)[1][:4], btlnk, batch_size=16, step=step)
 
 
 if __name__=="__main__":

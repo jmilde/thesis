@@ -1,4 +1,7 @@
 * Master thesis: generative design of logos
+
+all following code needs to be run from the project root.
+
 ** virtual environment
 
 python 3.7 is required.
@@ -26,7 +29,17 @@ pip install -r requirements.txt
 ** paths
 
 #+BEGIN_SRC sh
-mkdir data
+mkdir data .//data/eudata
 #+END_SRC
 ** download data
-- from https://data.vision.ee.ethz.ch/sagea/lld/ get "LLD_logo HDF5"
+- from https://euipo.europa.eu/ohimportal/en/open-data download all trademark data into the folder "data/eudata"
+
+** unpack data
+#+BEGIN_SRC sh
+bash src/unpack_eudata.sh
+#+END_SRC
+
+** preprocess the dataset
+#+BEGIN_SRC sh
+python3 -m src.prep_dataset
+#+END_SRC

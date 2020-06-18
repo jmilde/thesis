@@ -10,11 +10,14 @@ from skimage.transform import resize
 #################################
 # MOST FREQUENT COLORS IN IMAGE #
 #################################
-# idea:
-# 6-bit RGB palette use 2 bits for each of the red, green, and blue color components.
-# This results in a (2²)³ = 4³ = 64-color palette
+
 
 def get_colors(img, shape):
+    """
+    idea:
+    6-bit RGB palette use 2 bits for each of the red, green, and blue color components.
+    (see wikipedia for image example)
+    This results in a (2²)³ = 4³ = 64-color palette"""
     out = np.full([4,4,4],0, dtype=np.float32)
     img = img[:,:shape[1], :shape[2]]
     img = np.rollaxis(img,0,3)
@@ -30,7 +33,7 @@ def prep_color():
 
     #path_data = '/home/jan/Documents/uni/thesis/data/LLD-logo.hdf5'
     len_imgs = len(h5py.File(path_data, 'r')['shapes'])
-    imgs = iter(h5py.File(path_data, 'r')['data'])
+    imgs = iter(h5py.File(path_dareta, 'r')['data'])
     shapes = iter(h5py.File(path_data, 'r')['shapes'])
     #ds = iter([[img, shape] for img, shape in zip(imgs, shapes)])
 

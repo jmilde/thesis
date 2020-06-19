@@ -35,18 +35,23 @@ def main():
     restore_model = "" #empty or modelname for model stored at path_ckpt
 
     # Data info
-    RESIZE_SIZE = [256,256]
-    ds_size = len(np.load(path_cond, allow_pickle=True)["colors"])
+    RESIZE_SIZE    = [256,256]
+    ds_size        = len(np.load(path_cond, allow_pickle=True)["colors"])
     INPUT_CHANNELS = 3
-    img_dim = RESIZE_SIZE + [INPUT_CHANNELS]
-    cond_dim = len(np.load(path_cond, allow_pickle=True)["colors"][1])
-    cond_hdim  = 256 #64 #512
-    epochs     = 50
-    batch_size = 16
-    logfrq = ds_size//100//batch_size # log ~100x per epoch
-    vae_epochs = 0 # pretrain only vae
-    btlnk = 512
-    channels = [32, 64, 128, 256, 512, 512]
+    img_dim        = RESIZE_SIZE + [INPUT_CHANNELS]
+    cond_dim       = len(np.load(path_cond, allow_pickle=True)["colors"][1])
+    cond_dim_color = 256 #64 #512
+    rnn_dim        = 128 # output= dimx2 because of bidirectional concat
+    cond_dim_txts  = 256
+    vocab_dim      = 8192 #hardcoded, could be looked up if spm is moved outside the batch function
+    emb_dim        = 128
+
+    epochs         = 50
+    batch_size     = 16
+    logfrq         = ds_size//100//batch_size # log ~100x per epoch
+    vae_epochs     = 0 # pretrain only vae
+    btlnk          = 512
+    channels       = [32, 64, 128, 256, 512, 512]
 
     ### loss weights
     #beta  0.01 - 100, larger β improves reconstruction quality but may influence sample diversity
@@ -57,7 +62,7 @@ def main():
     lr_enc= 0.0001
     lr_dec= 0.0001
     beta1 = 0.9 #0.5
-    model_name = f"Icond{cond_hdim}-pre{vae_epochs}-{','.join(str(x) for x in RESIZE_SIZE)}-m{m_plus}-lr{lr_enc}b{beta1}-w_rec{weight_rec}"
+    model_name = f"Icolor{cond_dim_color}txts{cond_dim_txts}-pre{vae_epochs}-{','.join(str(x) for x in RESIZE_SIZE)}-m{m_plus}-lr{lr_enc}b{beta1}-w_rec{weight_rec}-rnn{rnn_dim}-emb{emb_dim}"
 
     path_ckpt  = path_ckpt+model_name
 
@@ -69,11 +74,14 @@ def main():
 
     # model
     model = INTROVAE(img_dim,
-                     cond_dim,
                      channels,
                      btlnk,
                      batch_size,
-                     cond_hdim,
+                     cond_dim_color,
+                     rnn_dim,
+                     cond_dim_txts,
+                     vocab_dim,
+                     emb_dim,
                      normalizer_enc = tf.keras.layers.BatchNormalization,
                      normalizer_dec = tf.keras.layers.BatchNormalization,
                      weight_rec=weight_rec,

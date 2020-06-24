@@ -82,14 +82,6 @@ def main(path_data, resize_size, path_out, batch_size):
     np.savez_compressed(os.path.join(path_out, f"eudata_conditionals.npz"), colors=colors, txts=txts)
     print(f"Done: saved all images in {path_out}imgs/ and the conditionals as eudata_conditionals.npz")
 
-for path in paths:
-    fd=open(path)
-    doc = xmltodict.parse(fd.read())
-    infos = doc["Transaction"]["TradeMarkTransactionBody"]["TransactionContentDetails"]["TransactionData"]["TradeMarkDetails"]["TradeMark"]
-    if infos.get("MarkFeature")=="Figurative":
-        print(path)
-        break
-
 
 def prep(path, resize_size):
     with open(path) as fd:

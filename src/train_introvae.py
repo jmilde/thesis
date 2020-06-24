@@ -1,4 +1,4 @@
-from src.util_tf import batch_resize, batch_resize_cond, batch, pipe, spread_image
+from src.util_tf import batch_cond_spm, pipe, spread_image
 from src.util_io import pform
 from src.models.introvae import INTROVAE
 from src.analyze_introvae import run_tests
@@ -24,27 +24,34 @@ def main():
         tf.config.experimental.set_visible_devices(gpus[0], 'GPU')
         tf.config.experimental.set_memory_growth(gpus[0], True)
 
-    path_data = expanduser('~/data/LLD-logo.hdf5')
-    path_cond = expanduser('~/data/color_conditional.npz')
-    path_log  = expanduser("~/cache/tensorboard-logdir/")
-    path_ckpt = expanduser('./ckpt/')
+
+    path_ckpt  = expanduser('./ckpt/')
+    path_cond  = expanduser('~/data/eudata_conditionals.npz')
+    path_data  = expanduser('~/data/imgs')
+    path_log   = expanduser("~/cache/tensorboard-logdir/")
+    path_vocab = expanduser("~/data/logo_vocab")
 
     # restore pretrained?
     restore_model = "" #empty or modelname for model stored at path_ckpt
 
     # Data info
-    RESIZE_SIZE = [256,256]
-    ds_size = len(h5py.File(path_data, 'r')['data'])
+    RESIZE_SIZE    = [256,256]
+    ds_size        = len(np.load(path_cond, allow_pickle=True)["colors"])
     INPUT_CHANNELS = 3
-    img_dim = RESIZE_SIZE + [INPUT_CHANNELS]
-    cond_dim = len(np.load(path_cond, allow_pickle=True)["colors"][1])
-    cond_hdim  = 256 #64 #512
-    epochs     = 50
-    batch_size = 16
-    logfrq = ds_size//100//batch_size # log ~100x per epoch
-    vae_epochs = 0 # pretrain only vae
-    btlnk = 512
-    channels = [32, 64, 128, 256, 512, 512]
+    img_dim        = RESIZE_SIZE + [INPUT_CHANNELS]
+    cond_dim       = len(np.load(path_cond, allow_pickle=True)["colors"][1])
+    cond_dim_color = 256 #64 #512
+    rnn_dim        = 128 # output= dimx2 because of bidirectional concat
+    cond_dim_txts  = 256
+    vocab_dim      = 8192 #hardcoded, could be looked up if spm is moved outside the batch function
+    emb_dim        = 128
+
+    epochs         = 50
+    batch_size     = 16
+    logfrq         = ds_size//100//batch_size # log ~100x per epoch
+    vae_epochs     = 0 # pretrain only vae
+    btlnk          = 512
+    channels       = [32, 64, 128, 256, 512, 512]
 
     ### loss weights
     #beta  0.01 - 100, larger β improves reconstruction quality but may influence sample diversity
@@ -55,23 +62,26 @@ def main():
     lr_enc= 0.0001
     lr_dec= 0.0001
     beta1 = 0.9 #0.5
-    model_name = f"Icond{cond_hdim}-pre{vae_epochs}-{','.join(str(x) for x in RESIZE_SIZE)}-m{m_plus}-lr{lr_enc}b{beta1}-w_rec{weight_rec}"
+    model_name = f"Icolor{cond_dim_color}txts{cond_dim_txts}-pre{vae_epochs}-{','.join(str(x) for x in RESIZE_SIZE)}-m{m_plus}-lr{lr_enc}b{beta1}-w_rec{weight_rec}-rnn{rnn_dim}-emb{emb_dim}"
 
     path_ckpt  = path_ckpt+model_name
 
     #pipeline
     #bg = batch_resize(path_data, batch_size, RESIZE_SIZE)
     #data = pipe(lambda: bg, (tf.float32), prefetch=6)
-    bg = batch_resize_cond(path_data, path_cond, batch_size, RESIZE_SIZE)
-    data = pipe(lambda: bg, (tf.float32, tf.float32), (tf.TensorShape([None, None, None, None]), tf.TensorShape([None, None])), prefetch=6)
+    bg = batch_cond_spm(path_data, path_cond, path_vocab, batch_size)
+    data = pipe(lambda: bg, (tf.float32, tf.float32, tf.int64), (tf.TensorShape([None, None, None, None]), tf.TensorShape([None, None]), tf.TensorShape([None, None])), prefetch=6)
 
     # model
     model = INTROVAE(img_dim,
-                     cond_dim,
                      channels,
                      btlnk,
                      batch_size,
-                     cond_hdim,
+                     cond_dim_color,
+                     rnn_dim,
+                     cond_dim_txts,
+                     vocab_dim,
+                     emb_dim,
                      normalizer_enc = tf.keras.layers.BatchNormalization,
                      normalizer_dec = tf.keras.layers.BatchNormalization,
                      weight_rec=weight_rec,

@@ -3,7 +3,8 @@ from src.util import Record
 from src.util_tf import ResBlock, VariationalEncoding, downsampling_res_block, upsampling_res_block, sigmoid
 
 class INTROVAE(tf.keras.Model):
-    def __init__(self, inpt_dim, cond_dim, channels, btlnk, batch_size, cond_hdim,
+    def __init__(self, inpt_dim, channels, btlnk, batch_size, cond_dim_colors,
+                 rnn_dim, cond_dim_txts, vocab_dim, emb_dim,
                  normalizer_enc=tf.keras.layers.BatchNormalization,
                  normalizer_dec=tf.keras.layers.BatchNormalization,
                  name="Introvae",
@@ -26,14 +27,15 @@ class INTROVAE(tf.keras.Model):
         self.m_plus     = m_plus
 
         # encoding
-        self.inpt_layer      = tf.keras.layers.InputLayer(inpt_dim)
-        self.inpt_layer_cond = tf.keras.layers.InputLayer(cond_dim)
-        print(self.inpt_layer_cond)
-        self.encoder         = Encoder(channels, btlnk, normalizer=normalizer_enc)
-
+        self.inpt_layer       = tf.keras.layers.InputLayer(inpt_dim)
+        self.inpt_layer_cond  = tf.keras.layers.InputLayer(input_shape=(None,None))
+        self.inpt_layer_txt   = tf.keras.layers.InputLayer(input_shape=(None,None))
+        self.encoder          = Encoder(channels, btlnk, normalizer=normalizer_enc)
+        self.RNN              = GRU_bidirectional(rnn_dim, cond_dim_txts, vocab_dim, emb_dim)
+        self.dense_cond_color = tf.keras.layers.Dense(cond_dim_colors, name="dense_cond_color")
 
         # decoding
-        self.decoder= Decoder(inpt_dim, cond_hdim, channels[::-1], normalizer=normalizer_dec)
+        self.decoder= Decoder(inpt_dim, channels[::-1], normalizer=normalizer_dec)
 
         self.relu = tf.keras.layers.ReLU()
         # optimizers
@@ -44,8 +46,8 @@ class INTROVAE(tf.keras.Model):
         z, mu, lv = self.encoder(x)
         return z, mu, lv
 
-    def decode(self, x, cond, training=False):
-        return self.decoder(x, cond)
+    def decode(self, x, training=False):
+        return self.decoder(x)
 
     def kl_loss(self, mu, lv):
         #my_kl =  tf.reduce_mean(0.5 * (tf.square(mu) + tf.exp(lv) - lv - 1.0))
@@ -60,11 +62,19 @@ class INTROVAE(tf.keras.Model):
 
 
     def vae_step(self, inpt, training=True):
-        print(inpt.shape)
         x         = self.inpt_layer(inpt[0])
-        z_cond = self.inpt_layer_cond(inpt[1])
+        x_color   = self.inpt_layer_cond(inpt[1])
+        x_txt     = self.inpt_layer_txt(inpt[2])
+
+        # encode
         z, mu, lv = self.encode(x, training=training)  # encode real image
-        x_rec     = self.decode(z, z_cond, training=training)  # reconstruct real image
+
+        # conditionals
+        cond_color = self.relu(self.dense_cond_color(x_color))
+        cond_txts  = self.RNN(x_txt)
+
+        # decode
+        x_rec = self.decode(tf.concat([z, cond_color, cond_txts], 1), training=training)  # reconstruct real image
 
         # kl loss
         loss_kl = self.kl_loss(mu, lv)
@@ -90,15 +100,20 @@ class INTROVAE(tf.keras.Model):
         return output
 
     def call(self, inpt, training=True):
+        # inpts
+        x         = self.inpt_layer(inpt[0])
+        x_color   = self.inpt_layer_cond(inpt[1])
+        x_txt     = self.inpt_layer_txt(inpt[2])
+        z_p       = tf.random.normal((self.batch_size, self.btlnk), 0, 1)
 
-        # inputs
-        x     = self.inpt_layer(inpt[0])
-        z_cond = self.inpt_layer_cond(inpt[1])
-        z_p = tf.random.normal((self.batch_size, self.btlnk), 0, 1)
+        #########
+        cond_color = self.relu(self.dense_cond_color(x_color))
+        #cond_txts  = self.RNN(x_txt)
+        cond_txts  = tf.zeros((16,256))
 
         z, mu, lv = self.encode(x, training=training)  # encode real image
-        x_r     = self.decode(z, z_cond, training=training)  # reconstruct real image
-        x_p = self.decode(z_p, z_cond, training=training) # generate fake from z_p
+        x_r       = self.decode(tf.concat([z, cond_color, cond_txts], 1), training=training)  # reconstruct real image
+        x_p       = self.decode(tf.concat([z_p, cond_color, cond_txts], 1), training=training) # generate fake from z_p
 
         # reconstruction loss
         loss_rec =  self.mse_loss(x, x_r)
@@ -196,7 +211,6 @@ class Encoder(tf.keras.layers.Layer):
 
 class Decoder(tf.keras.layers.Layer):
     def __init__(self, inpt_dim,
-                 cond_hdim,
                  channels=[512, 512, 512, 256, 128, 64],
                  normalizer=tf.keras.layers.BatchNormalization,
                  name="Decoder",
@@ -206,7 +220,6 @@ class Decoder(tf.keras.layers.Layer):
         xy_dim = inpt_dim[1]/(2**len(channels)) #wh
         self.dec_reshape_dim = (-1, int(xy_dim), int(xy_dim), channels[0])
 
-        self.dense_cond = tf.keras.layers.Dense(cond_hdim, name="dense_conditional")
 
         # dense layer to resize and reshape input
         self.dense_resize = tf.keras.layers.Dense(xy_dim*xy_dim*channels[0],name="dense_resize")
@@ -228,11 +241,33 @@ class Decoder(tf.keras.layers.Layer):
                                                       use_bias = False,
                                                       padding="same"))
 
-    def call(self, x, cond, training=False):
-        cond = self.relu(self.dense_cond(cond))
-        x=tf.concat([x, cond], 1)
+    def call(self, x, training=False):
         x = tf.reshape(self.relu(self.dense_resize(x)), self.dec_reshape_dim)
 
         for layer in self.layers:
             x = layer(x, training=training)
+        return x
+
+
+class GRU_bidirectional(tf.keras.layers.Layer):
+    def __init__(self, rnn_dim,
+                 dense_dim,
+                 vocab_dim,
+                 emb_dim,
+                 name="GRU_bidirectional",
+                 **kwargs):
+        super(GRU_bidirectional, self).__init__(name=name, **kwargs)
+
+        self.emb_layer = tf.keras.layers.Embedding(input_dim=vocab_dim, output_dim=emb_dim)
+        forward_layer = tf.keras.layers.GRU(rnn_dim)#, return_sequences=True)
+        backward_layer = tf.keras.layers.GRU(rnn_dim, go_backwards=True)#, return_sequences=True)
+        self.bidirectional = tf.keras.layers.Bidirectional(forward_layer, backward_layer=backward_layer,
+                         input_shape=(None, None, emb_dim))
+        self.dense = tf.keras.layers.Dense(dense_dim)
+
+    def call(self, x, training=False):
+        x = self.emb_layer(x)
+        x = self.bidirectional(x)
+        x = self.dense(x)
+
         return x

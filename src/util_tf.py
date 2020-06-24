@@ -2,9 +2,12 @@ import numpy as np
 import h5py
 from tqdm import tqdm
 import tensorflow as tf
-from src.util_np import sample
+from src.util_np import sample, vpack
 from src.util import Record
+from src.util_sp import load_spm
 from skimage.transform import resize
+from skimage import io
+import os
 
 def spread_image(x, nrow, ncol, height, width):
     return tf.reshape(
@@ -12,6 +15,24 @@ def spread_image(x, nrow, ncol, height, width):
             tf.reshape(x, (nrow, ncol, height, width, -1))
             , (0, 2, 1, 3, 4))
         , (1, nrow * height, ncol * width, -1))
+
+def batch_cond_spm(path_imgs, path_cond, path_spm, batch_size, seed=26):
+    """batch function to use with pipe"""
+    colors = np.load(path_cond, allow_pickle=True)["colors"]
+    txts = np.load(path_cond, allow_pickle=True)["txts"]
+    vocab = load_spm(path_spm + ".model")
+    vocab.SetEncodeExtraOptions("bos:eos") # enable start(=2)/end(=1) symbols
+
+    i, c, t = [], [], []
+    for j in sample(len(colors), seed):
+        if batch_size == len(i):
+            yield np.array(i, dtype="float32"), np.array(c, dtype="float32"), vpack(t, (batch_size, max(map(len,t))), fill=1,  dtype="int64")
+            i, c, t = [], [], []
+
+        i.append(io.imread(os.path.join(path_imgs, f"{j}.png"))/255)
+        c.append(colors[j])
+        t.append(vocab.encode_as_ids(txts[j]))
+
 
 def batch(path, batch_size, seed=26, channel_first=False):
     """batch function to use with pipe"""
@@ -24,7 +45,7 @@ def batch(path, batch_size, seed=26, channel_first=False):
             b = []
         if channel_first:
             b.append(data[i].astype(np.float32)/255)
-            #b.append(data[i].astype(np.float32)/255)
+            #b.append(data[ixb].astype(np.float32)/255)
         else:
             b.append(resize(np.rollaxis(data[i], 0, 3), (384,384))/255)
 
@@ -70,23 +91,6 @@ def batch_resized(path, batch_size, seed=26, channel_first=False):
             b.append(np.rollaxis(data[i], 0, 3)/255)
         else:
             b.append(data[i]/255)
-
-
-def batch_resize_cond(path, path_cond, batch_size, size=(64,64), seed=26):
-    """batch function to use with pipe"""
-    ds     = h5py.File(path, 'r')
-    data   = ds["data"]
-    shapes = ds["shapes"]
-    conds = np.load(path_cond, allow_pickle=True)["colors"]
-    b, c = [], []
-    for i in sample(len(data), seed):
-        if batch_size == len(b):
-            yield np.array(b), np.array(c)
-            b, c = [], []
-        shape = shapes[i]
-        b.append(resize(np.rollaxis(data[i][:,:shape[1], :shape[2]],0,3), size)/255)
-        c.append(conds[i])
-
 
 def pipe(generator, output_types, output_shapes=None, prefetch=1, repeat=-1, name='pipe', **kwargs):
     """see `tf.data.Dataset.from_generator`."""

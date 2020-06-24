@@ -46,7 +46,6 @@ def main(path_data, resize_size, path_out, batch_size):
     """
     preprocesses the data and saves it as a .npz file with the keys: imgs, colors, txts
     """
-
     print("collecting all paths...")
     paths = np.array(collect_paths(path_data))
     resize_size = np.repeat([resize_size], len(paths), axis=0)
@@ -65,7 +64,7 @@ def main(path_data, resize_size, path_out, batch_size):
         print("getting texts")
         txts = [d[1] for d in data]
         print("getting colors")
-        colors = np.array([d[2] for d in data], dtype="uint8")
+        colors = np.array([d[2] for d in data], dtype="float32")
         print(f"saving to part to {path_out}eudata_prep{i}.npz")
         np.savez_compressed(os.path.join(path_out, f"eudata_prep_pt{i}.npz"), imgs=imgs, colors=colors, txts=txts )
 
@@ -82,6 +81,15 @@ def main(path_data, resize_size, path_out, batch_size):
         txts.extend(data["txts"])
     np.savez_compressed(os.path.join(path_out, f"eudata_conditionals.npz"), colors=colors, txts=txts)
     print(f"Done: saved all images in {path_out}imgs/ and the conditionals as eudata_conditionals.npz")
+
+for path in paths:
+    fd=open(path)
+    doc = xmltodict.parse(fd.read())
+    infos = doc["Transaction"]["TradeMarkTransactionBody"]["TransactionContentDetails"]["TransactionData"]["TradeMarkDetails"]["TradeMark"]
+    if infos.get("MarkFeature")=="Figurative":
+        print(path)
+        break
+
 
 def prep(path, resize_size):
     with open(path) as fd:
@@ -138,7 +146,7 @@ def prep(path, resize_size):
 
                     displayed_text = infos.get("WordMarkSpecification", {}).get("MarkVerbalElementText")
                     colors = get_colors(img_resized)
-                    return img_resized.astype("uint8"), displayed_text if displayed_text else "", colors.astype("uint8")
+                    return img_resized.astype("uint8"), displayed_text if displayed_text else "", colors.astype("float32")
         except Exception as e:
             print(f"{e}: {path}, {img_path}")
         return None

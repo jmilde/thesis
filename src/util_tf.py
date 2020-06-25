@@ -16,12 +16,10 @@ def spread_image(x, nrow, ncol, height, width):
             , (0, 2, 1, 3, 4))
         , (1, nrow * height, ncol * width, -1))
 
-def batch_cond_spm(path_imgs, path_cond, path_spm, batch_size, seed=26):
+def batch_cond_spm(path_imgs, path_cond, spm, batch_size, seed=26):
     """batch function to use with pipe"""
     colors = np.load(path_cond, allow_pickle=True)["colors"]
     txts = np.load(path_cond, allow_pickle=True)["txts"]
-    vocab = load_spm(path_spm + ".model")
-    vocab.SetEncodeExtraOptions("bos:eos") # enable start(=2)/end(=1) symbols
 
     i, c, t = [], [], []
     for j in sample(len(colors), seed):
@@ -31,7 +29,7 @@ def batch_cond_spm(path_imgs, path_cond, path_spm, batch_size, seed=26):
 
         i.append(io.imread(os.path.join(path_imgs, f"{j}.png"))/255)
         c.append(colors[j])
-        t.append(vocab.encode_as_ids(txts[j]))
+        t.append(spm.encode_as_ids(txts[j]))
 
 
 def batch(path, batch_size, seed=26, channel_first=False):
@@ -184,7 +182,11 @@ def sigmoid(x, shift=0.0, mult=20):
     return tf.constant(1.0) / (tf.constant(1.0) + tf.exp(-tf.constant(1.0) * (x * mult)))
 
 class ResBlock(tf.keras.layers.Layer):
-    def __init__(self, nr_filters, adjust_channels=False, normalizer=tf.keras.layers.BatchNormalization, activation=tf.keras.layers.LeakyReLU(alpha=0.2)):
+    def __init__(self, nr_filters,
+                 adjust_channels=False,
+                 normalizer=tf.keras.layers.BatchNormalization,
+                 activation=tf.keras.layers.LeakyReLU(alpha=0.2),
+                 dropout_rate=0.2):
         super(ResBlock, self).__init__(name='ResBlock')
 
 
@@ -196,15 +198,16 @@ class ResBlock(tf.keras.layers.Layer):
         self.normalize1 = normalizer()
         self.conv2 = tf.keras.layers.Conv2D(nr_filters, kernel_size=3, padding="same", use_bias=False)
         self.normalize2 = normalizer()
+        self.dropout= tf.keras.layers.Dropout(dropout_rate)
 
-    def call(self, inpt):
+    def call(self, inpt, training=False):
         with tf.name_scope("ResBlock") as scope:
             if self.adjust: inpt = self.adjust(inpt)
             x = self.conv1(inpt)
             x = self.normalize1(x)
             x = self.activation(x)
             x = self.conv2(x)
-            x = self.activation(self.normalize2(x+inpt))
+            x = self.dropout(self.activation(self.normalize2(x+inpt)), training=training)
         return x
 
 #class ResBlock(Record):

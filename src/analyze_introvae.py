@@ -1,15 +1,15 @@
-from src.util_tf import batch_resize, batch_resize_cond, batch, pipe, spread_image
-from src.util_io import pform
-from src.models.introvae import INTROVAE
-import numpy as np
-import h5py
-from tqdm import trange,tqdm
+from datetime import datetime
 from matplotlib import pyplot as plt
+from os.path import expanduser
+from src.models.introvae import INTROVAE
+from src.util_io import pform
+from src.util_np import np, vpack
+from src.util_tf import batch_resize, batch_resize_cond, batch, pipe, spread_image
+from tqdm import trange,tqdm
+import h5py
+import os
 import tensorflow as tf
 import tensorflow_addons as tfa
-from datetime import datetime
-import os
-from os.path import expanduser
 
 def show_img(img, channel_first=False):
     if channel_first:
@@ -22,25 +22,44 @@ def move_through_latent(z_a, z_b, nr_steps):
     step = np.asarray((z_b-z_a)/nr_steps)
     return [z_a + step*i for i in range(1, nr_steps+1)]
 
-def run_tests(model, writer, conds, btlnk, batch_size=16, step=0):
+def run_tests(model, writer, img_embs, colors, txts, spm, btlnk, batch_size=16, step=0):
         np.random.seed(27)
 
-        x_gen, zs_gen = [], []
-        for cond in conds:
+        x_gen, zs_gen, x_txt = [], [],[]
+        for img_emb, color, txt in zip(img_embs, colors, txts):
+            # from random noise with color and txt from real examples
             x    = np.random.rand(batch_size, btlnk)
-            cond_batch = np.repeat(cond[np.newaxis, :], batch_size, axis=0)
-            x_gen.extend(model.decode(x, cond_batch))
+            cond_color = np.repeat(color[np.newaxis, :], batch_size, axis=0)
+            cond_txt = np.repeat(txt[np.newaxis, :], batch_size, axis=0)
+            x_gen.extend(model.generate(x, cond_color, cond_txt))
 
-            zs = move_through_latent(x[0], x[1], batch_size)
-            zs_gen.extend(model.decode(zs, cond_batch))
+            # latent space walk from real image to random point
+            zs = move_through_latent(img_embs, x[0], batch_size)
+            zs_gen.extend(model.generate(zs, cond_color, cond_txt))
+
+            # text exploration
+            x = np.repeat(img_emb[np.newaxis, :], batch_size, axis=0)
+            cond_color = np.repeat(color[np.newaxis, :], batch_size, axis=0)
+            t = [spm.encode_as_ids(t) for t in ["firma 1", "hallo", "was geht ab",  "kaltes bier", "vogel", "bird", "pelikan", "imperceptron", "albatros coding", "tree leaves", "nice coffee", "german engineering", "abcdef ghij", "klmnopq", "rstu vwxyz", "0123456789"]]
+            cond_txt   = vpack(t, (batch_size, max(map(len,t))), fill=1,  dtype="int64")
+            x_txt.extend(model.generate(x, cond_color, cond_txt))
+
+            # color exploration
+            x = np.repeat(img_emb[np.newaxis, :], batch_size, axis=0)
+            cond_color = np.repeat(color[np.newaxis, :], batch_size, axis=0)
+            cond_txt = np.repeat(txt[np.newaxis, :], batch_size, axis=0)
+            x_txt.extend(model.generate(x, cond_color, cond_txt))
 
         with writer.as_default():
-            tf.summary.image( "x_gen",
-                              spread_image(x_gen,4,4*len(conds),256,256),
+            tf.summary.image( "change_x",
+                              spread_image(x_gen,1*len(colors),16,256,256),
                               step=step)
-            tf.summary.image( "zs_gen",
-                              spread_image(zs_gen,1*len(conds),16,256,256),
-                              step=0)
+            tf.summary.image( "latent_walk",
+                              spread_image(zs_gen,1*len(colors),16,256,256),
+                              step=step)
+            tf.summary.image( "change_text",
+                              spread_image(zs_gen,1*len(colors),16,256,256),
+                              step=step)
             writer.flush()
 
 
@@ -54,6 +73,7 @@ def main():
     path_cond = expanduser('~/data/color_conditional.npz')
     path_log  = expanduser("~/cache/tensorboard-logdir/")
     path_ckpt = expanduser('./ckpt/')
+    path_spm = expanduser("~/data/logo_vocab")
 
     # restore pretrained?
     restore_model = "" #empty or modelname for model stored at path_ckpt
@@ -112,6 +132,11 @@ def main():
     ckpt.restore(manager.latest_checkpoint)
     print("\nmodel restored\n")
 
+
+    # load sentence piece model
+    spm = load_spm(path_spm + ".model")
+    spm.SetEncodeExtraOptions("bos:eos") # enable start(=2)/end(=1) symbols
+
     conds = np.array([[0.  , 0.6  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
                0.  , 0.  , 0.  , 0.4  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.,
                0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0. ,
@@ -124,7 +149,7 @@ def main():
                0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.04, 0.  ,
                0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
                0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.3 ]])
-    run_tests(model, writer, conds, btlnk, batch_size)
+    run_tests(model, writer, conds, spm, btlnk, batch_size)
 
 
 if __name__=="__main__":

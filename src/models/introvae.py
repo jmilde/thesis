@@ -15,6 +15,8 @@ class INTROVAE(tf.keras.Model):
                  lr_enc= 0.0002,
                  lr_dec= 0.0002,
                  beta1 = 0.5,
+                 dropout_conditionals=0.3,
+                 dropout_encoder_resblock=0.3,
                  **kwargs):
         super(INTROVAE, self).__init__(name=name, **kwargs)
 
@@ -30,10 +32,12 @@ class INTROVAE(tf.keras.Model):
         self.inpt_layer       = tf.keras.layers.InputLayer(inpt_dim)
         self.inpt_layer_cond  = tf.keras.layers.InputLayer(input_shape=(None,None))
         self.inpt_layer_txt   = tf.keras.layers.InputLayer(input_shape=(None,None))
-        self.encoder          = Encoder(channels, btlnk, normalizer=normalizer_enc)
-        self.RNN              = GRU_bidirectional(rnn_dim, cond_dim_txts, vocab_dim, emb_dim)
+        self.encoder          = Encoder(channels, btlnk, normalizer=normalizer_enc, dropout_rate=dropout_encoder_resblock)
+        self.RNN              = GRU_bidirectional(rnn_dim, vocab_dim, emb_dim)
         self.dense_cond_color = tf.keras.layers.Dense(cond_dim_colors, name="dense_cond_color")
-
+        self.dense_cond_txt   = tf.keras.layers.Dense(cond_dim_txts, name="dense_cond_txt")
+        self.dropout_color    = tf.keras.layers.Dropout(dropout_conditionals)
+        self.dropout_txt      = tf.keras.layers.Dropout(dropout_conditionals)
         # decoding
         self.decoder= Decoder(inpt_dim, channels[::-1], normalizer=normalizer_dec)
 
@@ -51,15 +55,19 @@ class INTROVAE(tf.keras.Model):
 
     def kl_loss(self, mu, lv):
         #my_kl =  tf.reduce_mean(0.5 * (tf.square(mu) + tf.exp(lv) - lv - 1.0))
-        return tf.reduce_mean(-0.5 * tf.reduce_sum((-1*(tf.square(-mu)+tf.exp(lv))+1+lv),-1))
+        return tf.reduce_mean(-0.5 * tf.reduce_sum((-1*(tf.square(-mu)+tf.exp(lv))+1+lv),-1))+0.0
 
     def mse_loss(self, x, x_rec, size_average=True):
         x = tf.reduce_sum(tf.math.square(tf.reshape(x-x_rec,(x.shape[0],-1))), -1)
         if size_average:
-            return tf.reduce_mean(x)
+            return tf.reduce_mean(x)+0.0
         else:
-            return tf.reduce_sum(x)
+            return tf.reduce_sum(x)+0.0
 
+    def generate(self, x, color, spm_txt, training=False):
+        cond_color = self.dropout_color(self.relu(self.dense_cond_color(color)), training=training)
+        cond_txts  = self.dropout_txt(self.relu(self.dense_cond_txt(self.RNN(spm_txt))), training=training)
+        return self.decode(tf.concat([x, cond_color, cond_txts], 1))
 
     def vae_step(self, inpt, training=True):
         x         = self.inpt_layer(inpt[0])
@@ -70,8 +78,8 @@ class INTROVAE(tf.keras.Model):
         z, mu, lv = self.encode(x, training=training)  # encode real image
 
         # conditionals
-        cond_color = self.relu(self.dense_cond_color(x_color))
-        cond_txts  = self.RNN(x_txt)
+        cond_color = self.dropout_color(self.relu(self.dense_cond_color(x_color)), training=training)
+        cond_txts  = self.dropout_txt(self.relu(self.dense_cond_txt(self.RNN(x_txt))), training=training)
 
         # decode
         x_rec = self.decode(tf.concat([z, cond_color, cond_txts], 1), training=training)  # reconstruct real image
@@ -84,14 +92,13 @@ class INTROVAE(tf.keras.Model):
 
         loss = loss_rec+loss_kl
 
-        return {"x":inpt,
+        return {"x":x,
                 "x_rec": x_rec,
                 "loss": loss,
                 "loss_kl": loss_kl,
                 "loss_rec": loss_rec}
 
-
-    @tf.function
+    @tf.function()
     def train_vae(self, x):
         with tf.GradientTape() as tape:
             output = self.vae_step(x, training=True)
@@ -108,8 +115,7 @@ class INTROVAE(tf.keras.Model):
 
         #########
         cond_color = self.relu(self.dense_cond_color(x_color))
-        #cond_txts  = self.RNN(x_txt)
-        cond_txts  = tf.zeros((16,256))
+        cond_txts  = self.relu(self.dense_cond_txt(self.RNN(x_txt)))
 
         z, mu, lv = self.encode(x, training=training)  # encode real image
         x_r       = self.decode(tf.concat([z, cond_color, cond_txts], 1), training=training)  # reconstruct real image
@@ -120,8 +126,8 @@ class INTROVAE(tf.keras.Model):
 
 
         # no gradient flow for encoder
-        _, mu_r_, lv_r_ = self.encode(tf.stop_gradient(x_r)) # encode reconstruction
-        _, mu_p_, lv_p_ = self.encode(tf.stop_gradient(x_p)) # encode fake
+        _, mu_r_, lv_r_ = self.encode(tf.stop_gradient(x_r), training=training) # encode reconstruction
+        _, mu_p_, lv_p_ = self.encode(tf.stop_gradient(x_p), training=training) # encode fake
 
         # Encoder Adversarial Loss
         kl_real  = self.kl_loss(mu, lv)
@@ -135,8 +141,8 @@ class INTROVAE(tf.keras.Model):
 
 
         # gradient flow for decoder
-        _, mu_r, lv_r = self.encode(x_r) # encode reconstruction
-        _, mu_p, lv_p = self.encode(x_p) # encode fake
+        _, mu_r, lv_r = self.encode(x_r, training=training) # encode reconstruction
+        _, mu_p, lv_p = self.encode(x_p, training=training) # encode fake
 
         ### DECODER
         kl_rec  = self.kl_loss(mu_r, lv_r)
@@ -179,6 +185,7 @@ class Encoder(tf.keras.layers.Layer):
                  latent_dim,
                  normalizer=tf.keras.layers.BatchNormalization,
                  name="Encoder",
+                 dropout_rate=0.2,
                  **kwargs):
         super(Encoder, self).__init__(name=name, **kwargs)
 
@@ -193,11 +200,12 @@ class Encoder(tf.keras.layers.Layer):
 
         for i, channel in enumerate(channels[1:], 1):
             self.layers.append(ResBlock(channel,
-                                        adjust_channels=channel!=channels[i-1]))
+                                        adjust_channels=channel!=channels[i-1],
+                                        dropout_rate=dropout_rate))
             self.layers.append(tf.keras.layers.AveragePooling2D())
 
         # additional res layer
-        self.layers.append(ResBlock(channels[-1]))
+        self.layers.append(ResBlock(channels[-1], dropout_rate=dropout_rate))
 
         self.variational = VariationalEncoding(latent_dim)
 
@@ -217,13 +225,14 @@ class Decoder(tf.keras.layers.Layer):
                  **kwargs):
         super(Decoder, self).__init__(name=name, **kwargs)
 
+        self.relu = tf.keras.layers.ReLU()
+
         xy_dim = inpt_dim[1]/(2**len(channels)) #wh
         self.dec_reshape_dim = (-1, int(xy_dim), int(xy_dim), channels[0])
 
 
         # dense layer to resize and reshape input
         self.dense_resize = tf.keras.layers.Dense(xy_dim*xy_dim*channels[0],name="dense_resize")
-        self.relu = tf.keras.layers.ReLU()
 
         self.layers = []
         self.layers.append(ResBlock(channels[0]))
@@ -242,7 +251,8 @@ class Decoder(tf.keras.layers.Layer):
                                                       padding="same"))
 
     def call(self, x, training=False):
-        x = tf.reshape(self.relu(self.dense_resize(x)), self.dec_reshape_dim)
+        x = self.relu(self.dense_resize(x))
+        x = tf.reshape(x, self.dec_reshape_dim)
 
         for layer in self.layers:
             x = layer(x, training=training)
@@ -251,7 +261,6 @@ class Decoder(tf.keras.layers.Layer):
 
 class GRU_bidirectional(tf.keras.layers.Layer):
     def __init__(self, rnn_dim,
-                 dense_dim,
                  vocab_dim,
                  emb_dim,
                  name="GRU_bidirectional",
@@ -259,15 +268,12 @@ class GRU_bidirectional(tf.keras.layers.Layer):
         super(GRU_bidirectional, self).__init__(name=name, **kwargs)
 
         self.emb_layer = tf.keras.layers.Embedding(input_dim=vocab_dim, output_dim=emb_dim)
-        forward_layer = tf.keras.layers.GRU(rnn_dim)#, return_sequences=True)
-        backward_layer = tf.keras.layers.GRU(rnn_dim, go_backwards=True)#, return_sequences=True)
+        forward_layer = tf.keras.layers.GRU(rnn_dim)
+        backward_layer = tf.keras.layers.GRU(rnn_dim, go_backwards=True)
         self.bidirectional = tf.keras.layers.Bidirectional(forward_layer, backward_layer=backward_layer,
                          input_shape=(None, None, emb_dim))
-        self.dense = tf.keras.layers.Dense(dense_dim)
 
     def call(self, x, training=False):
         x = self.emb_layer(x)
         x = self.bidirectional(x)
-        x = self.dense(x)
-
         return x

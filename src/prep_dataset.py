@@ -10,6 +10,10 @@ import numpy as np
 import os
 import xmltodict
 
+### value to position
+#x=[[a,b,c] for a in range(0,256,85) for b in range(0,256,85) for c in range(0,256,85)]
+#[f"rgb({b},{a},{c})" for a,b,c  in x]
+
 def get_description(description, language_code="en"):
     if description:
         if type(description)==list:

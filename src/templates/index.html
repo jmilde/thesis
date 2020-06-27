@@ -1,0 +1,62 @@
+{% extends 'layout.html' %}
+
+{% block head%}
+<link href="static/huebee.css" rel="stylesheet" media="screen">
+{% endblock %}
+
+
+{% block body %}
+<div class="container">
+  <div class="row">
+    <h1>Latent Exploration</h1>
+  </div>
+  <div class="row">
+    <div class="col-3">
+      <form action="/predict" method="POST">
+        <div class="py-3">
+          <h4>Text</h4>
+          <p>The text which is supposed to be displayed in the logo</p>
+          <input type="text" name="text" value={{text}} id="text" size="20" style="font-family:monospace">
+        </div>
+        <div class="py-3">
+          <h4>Colors</h4>
+          <p>Select up to 5 colors that shoud appear in the logo and the percentage to which the generated logo should contain it.
+            If the percentages sum up to over 100% then they are normalized, if below hundred then filled up with white.</p>
+          <div>
+            <input type="text" name="color_1" class="color-input" size="12" value={{color_1}}>
+            <input type="text" name="value_1" maxlength="3" size="3" style="font-family:monospace" value={{value_1}}>%
+          </div>
+          <div>
+            <input type="text" name="color_2" class="color-input" size="12" value={{color_2}}>
+            <input type="text" name="value_2" maxlength="3" size="3" style="font-family:monospace" value={{value_2}}>%
+          </div>
+          <div>
+            <input type="text" name="color_3" class="color-input" size="12" value={{color_3}}>
+            <input type="text" name="value_3" maxlength="3" size="3" style="font-family:monospace" value={{value_3}}>%
+          </div>
+          <div>
+            <input type="text" name="color_4" class="color-input" size="12" value={{color_4}}>
+            <input type="text" name="value_4" maxlength="3" size="3" style="font-family:monospace" value={{value_4}}>%
+          </div>
+          <div>
+            <input type="text" name="color_5" class="color-input" size="12" value={{color_5}}>
+            <input type="text" name="value_5" maxlength="3" size="3" style="font-family:monospace" value={{value_5}}>%
+          </div>
+        </div>
+        <input type="submit" value="Generate">
+      </form>
+    </div>
+    <div class="col-9">
+      okay
+    </div>
+  </div>
+</div>
+</div>
+{% endblock %}
+
+
+
+{% block scripts %}
+<script type="text/javascript" src="static/huebee.pkgd.min.js"></script>
+<script type="text/javascript" src="static/js.js"></script>
+{% endblock %}

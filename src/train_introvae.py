@@ -126,9 +126,10 @@ def main():
                 if step==1:
                     with writer.as_default():
                         tf.summary.trace_export(name="introvae_vae", step=0, profiler_outdir=path_log)
+                    model._set_inputs(*next(data))
 
                 # train step
-                output = model.train_vae(next(data))
+                output = model.train_vae(*next(data))
 
                 # logging
                 if step%logfrq==0:
@@ -143,7 +144,7 @@ def main():
                          tf.summary.scalar("vae_loss_kl"  , output["loss_kl"].numpy()  , step=step)
                 if step%(logfrq*10)==0:
                     example_data=next(data)
-                    run_tests(model, writer,example_data[0][:4], example_data[1][:4], next(data)[2][:4], spm, btlnk, batch_size=16, step=step)
+                    run_tests(model, writer,example_data[0][:4], example_data[1][:4], example_data[2][:4], spm, btlnk, batch_size=16, step=step)
 
         save_path = manager.save()
         print("\nsaved VAE-model\n")
@@ -160,7 +161,7 @@ def main():
         for _ in trange(ds_size//batch_size, desc="steps in epochs", position=1, leave=False):
             ckpt.step.assign_add(1)
             step+=1 #using ckpt.step leads to memory leak
-            output = model.train(next(data))
+            output = model.train(*next(data))
 
             # get graph
             if step==1 and not vae_epochs:
@@ -196,17 +197,16 @@ def main():
                     tf.summary.scalar("kl_rec"       , output["kl_rec"].numpy()       , step=step)
                     tf.summary.scalar("loss_enc_adv"  , output["loss_enc_adv"].numpy()  , step=step)
                     tf.summary.scalar("loss_dec_adv"  , output["loss_dec_adv"].numpy()  , step=step)
-
                     writer.flush()
 
             if step%(logfrq*10)==0:
                     example_data=next(data)
-                    run_tests(model, writer,example_data[0][:4], example_data[1][:4], next(data)[2][:4], spm, btlnk, batch_size=16, step=step)
+                    run_tests(model, writer,example_data[0][:4], example_data[1][:4], example_data[2][:4], spm, btlnk, batch_size=16, step=step)
 
         # save model every epoch
         save_path = manager.save()
         print(f"\nsaved model after epoch {epoch}\n")
-        run_tests(model, writer, next(data)[1][:4], next(data)[2][:4], spm, btlnk, batch_size=16, step=step)
+
 
 
 if __name__=="__main__":

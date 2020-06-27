@@ -34,18 +34,19 @@ def run_tests(model, writer, img_embs, colors, txts, spm, btlnk, batch_size=16, 
             x_gen.extend(model.generate(x, cond_color, cond_txt))
 
             # latent space walk from real image to random point
-            zs = move_through_latent(img_embs, x[0], batch_size)
+            _, mu, _ = model.encode(img_emb[np.newaxis, :])
+            zs = move_through_latent(mu[0], x[0], batch_size)
             zs_gen.extend(model.generate(zs, cond_color, cond_txt))
 
             # text exploration
-            x = np.repeat(img_emb[np.newaxis, :], batch_size, axis=0)
+            _, x, _ = model.encode(np.repeat(img_emb[np.newaxis, :], batch_size, axis=0))
             cond_color = np.repeat(color[np.newaxis, :], batch_size, axis=0)
             t = [spm.encode_as_ids(t) for t in ["firma 1", "hallo", "was geht ab",  "kaltes bier", "vogel", "bird", "pelikan", "imperceptron", "albatros coding", "tree leaves", "nice coffee", "german engineering", "abcdef ghij", "klmnopq", "rstu vwxyz", "0123456789"]]
             cond_txt   = vpack(t, (batch_size, max(map(len,t))), fill=1,  dtype="int64")
             x_txt.extend(model.generate(x, cond_color, cond_txt))
 
             # color exploration
-            x = np.repeat(img_emb[np.newaxis, :], batch_size, axis=0)
+            _, x, _ = model.encode(np.repeat(img_emb[np.newaxis, :], batch_size, axis=0))
             cond_color = np.repeat(color[np.newaxis, :], batch_size, axis=0)
             cond_txt = np.repeat(txt[np.newaxis, :], batch_size, axis=0)
             x_txt.extend(model.generate(x, cond_color, cond_txt))

@@ -69,10 +69,10 @@ class INTROVAE(tf.keras.Model):
         cond_txts  = self.dropout_txt(self.relu(self.dense_cond_txt(self.RNN(spm_txt))), training=training)
         return self.decode(tf.concat([x, cond_color, cond_txts], 1))
 
-    def vae_step(self, inpt, training=True):
-        x         = self.inpt_layer(inpt[0])
-        x_color   = self.inpt_layer_cond(inpt[1])
-        x_txt     = self.inpt_layer_txt(inpt[2])
+    def vae_step(self, x, colors, txts, training=True):
+        x         = self.inpt_layer(x)
+        x_color   = self.inpt_layer_cond(colors)
+        x_txt     = self.inpt_layer_txt(txts)
 
         # encode
         z, mu, lv = self.encode(x, training=training)  # encode real image
@@ -97,20 +97,24 @@ class INTROVAE(tf.keras.Model):
                 "loss": loss,
                 "loss_kl": loss_kl,
                 "loss_rec": loss_rec}
-
-    @tf.function()
-    def train_vae(self, x):
+    # maybe with tf 2.2 this works
+    #input_signature=[tf.TensorSpec(shape=(None,None,None,None), dtype=tf.float32),
+                                  #tf.TensorSpec(shape=(None,None), dtype=tf.float32),
+                                  #tf.TensorSpec(shape=(None,None), dtype=tf.int64)])
+    @tf.function
+    def train_vae(self, x, colors, txts):
         with tf.GradientTape() as tape:
-            output = self.vae_step(x, training=True)
+            output = self.vae_step(x, colors, txts, training=True)
             loss = output["loss"]
         self.optimizer_enc.apply_gradients(zip(tape.gradient(loss, self.trainable_variables), self.trainable_variables))
         return output
 
-    def call(self, inpt, training=True):
+    @tf.function
+    def call(self, x, colors, txts, training=True):
         # inpts
-        x         = self.inpt_layer(inpt[0])
-        x_color   = self.inpt_layer_cond(inpt[1])
-        x_txt     = self.inpt_layer_txt(inpt[2])
+        x         = self.inpt_layer(x)
+        x_color   = self.inpt_layer_cond(colors)
+        x_txt     = self.inpt_layer_txt(txts)
         z_p       = tf.random.normal((self.batch_size, self.btlnk), 0, 1)
 
         #########
@@ -167,9 +171,9 @@ class INTROVAE(tf.keras.Model):
 
 
     @tf.function
-    def train(self, x):
+    def train(self, x, colors, txts,):
         with tf.GradientTape() as e_tape, tf.GradientTape() as d_tape:
-            output = self.call(x, training = True)
+            output = self.call(x, colors, txts, training = True)
             e_loss = output["loss_enc"] # encoder
             d_loss = output["loss_dec"] # decoder
         self.optimizer_enc.apply_gradients(zip(e_tape.gradient(e_loss, self.encoder.trainable_variables), self.encoder.trainable_variables))

@@ -1,38 +1,16 @@
-from flask import Flask, request, jsonify, render_template
-import tensorflow as tf
-import numpy as np
+from skimage.io import imsave
 from collections import defaultdict
-import ast
-from src.util_sp import load_spm
+from flask import Flask, request, jsonify, render_template
 from os.path import expanduser
-
-
+from src.analyze_introvae import load_model
+from src.util_sp import load_spm
+import ast
+import numpy as np
+import tensorflow as tf
+import datetime
 app = Flask(__name__)
 
-
-@app.before_first_request
-def load_models():
-    app.spm = load_spm(expanduser("~/data/logo_vocab") + ".model")
-    app.spm.SetEncodeExtraOptions("bos:eos")
-    app.predictor = tf.keras.models.load_model('./data/testmodel_save')
-
-
-@app.route("/")
-def index():
-    return render_template('index.html',
-                           text   ="Beispieltext",
-                           color_1="rgb(0,0,1)",
-                           value_1="40")
-
-
-@app.route('/predict', methods=['POST'])
-def predict():
-    data = request.form
-
-    ### get text
-    text = data.get("text")
-    txt_cond = app.spm.encode(text)
-    ### get colors:
+def prep_colors(data):
     value_sum = 0
     collector = defaultdict(lambda: defaultdict())
     for key in data:
@@ -61,20 +39,96 @@ def predict():
     for k,v in collector.items():
         color = np.around(np.array(v["color"])/85.33333333333333,0).astype("int")
         color_cond[color[0], color[1], color[2]]=v["value"]*normalize
+    return color_cond.flatten()
+
+@app.before_first_request
+def load_models():
+    app.spm = load_spm(expanduser("~/data/logo_vocab") + ".model")
+    app.spm.SetEncodeExtraOptions("bos:eos")
+    #app.predictor = tf.keras.models.load_model('~/models/testmodel_save')
+    app.generator= load_model()
 
 
-    print(txt_cond)
-    #predictions = app.predictor.generate(img_emb, color_cond, txt_cond)
-
+@app.route("/")
+def index():
     return render_template('index.html',
-                           text   =data.get("text"),
-                           color_1=data.get("color_1"),
-                           color_2=data.get("color_2"),
-                           color_3=data.get("color_3"),
-                           color_4=data.get("color_4"),
-                           color_5=data.get("color_5"),
-                           value_1=data.get("value_1"),
-                           value_2=data.get("value_2"),
-                           value_3=data.get("value_3"),
-                           value_4=data.get("value_4"),
-                           value_5=data.get("value_5"))
+                           text   ="Beispieltext",
+                           color_1="rgb(0,0,1)",
+                           value_1="40")
+
+
+@app.route('/generate_random', methods=['POST'])
+def generate_random():
+    data = request.json
+
+    ### get text
+    text = data.get("text")
+    txt_cond = np.array(app.spm.encode(text))
+    txt_cond = np.repeat(txt_cond[np.newaxis, :], 9, axis=0)
+
+    ### get colors:
+    color_cond = np.array(prep_colors(data))
+    color_cond = np.repeat(color_cond[np.newaxis, :], 9, axis=0)
+    ### random image embedding
+    img_embs = np.random.rand(9,512)
+
+    imgs = app.generator.generate(img_embs, color_cond, txt_cond)
+    sigmoid = lambda x: 1/(1 + np.exp(-x))
+    time = datetime.datetime.now().strftime("%Y%m%d%H%M%S%f")
+
+    for i, (emb, img) in enumerate(zip(img_embs, imgs),1):
+        imsave(f"./src/static/imgtmp{i}.jpg", (sigmoid(img)*255).astype("uint8"))
+        np.save(f"./src/static/embtmp{i}.npy", emb)
+
+    return jsonify({
+        "img_path1":f"../static/imgtmp1.jpg?{time}",
+        "img_path2":f"../static/imgtmp2.jpg?{time}",
+        "img_path3":f"../static/imgtmp3.jpg?{time}",
+        "img_path4":f"../static/imgtmp4.jpg?{time}",
+        "img_path5":f"../static/imgtmp5.jpg?{time}",
+        "img_path6":f"../static/imgtmp6.jpg?{time}",
+        "img_path7":f"../static/imgtmp7.jpg?{time}",
+        "img_path8":f"../static/imgtmp8.jpg?{time}",
+        "img_path9":f"../static/imgtmp9.jpg?{time}"})
+
+@app.route('/generate_similar', methods=['POST'])
+def generate_similar():
+    data = request.json
+
+    ### get embeddings
+    img_nr = data['img']
+    og_img = np.load(f"./src/static/embtmp{img_nr}.npy")
+    ### get text
+    text = data.get("text")
+    txt_cond = np.array(app.spm.encode(text))
+    txt_cond = np.repeat(txt_cond[np.newaxis, :], 9, axis=0)
+    ### get colors:
+    color_cond = np.array(prep_colors(data))
+    color_cond = np.repeat(color_cond[np.newaxis, :], 9, axis=0)
+
+    img_embs= np.repeat(og_img[np.newaxis, :], 9, axis=0) +np.random.normal(0, scale=0.1, size=(9,512))
+    img_embs[img_embs<0]=0
+    img_embs[img_embs>1]=1
+    #img_embs[img_nr]=og_img # keep the image we clicked on the same
+
+
+    imgs = app.generator.generate(img_embs, color_cond, txt_cond)
+    sigmoid = lambda x: 1/(1 + np.exp(-x))
+    time = datetime.datetime.now().strftime("%Y%m%d%H%M%S%f")
+
+    for i, (emb, img) in enumerate(zip(img_embs, imgs),1):
+        if i != img_nr:
+            imsave(f"./src/static/imgtmp{i}.jpg", (sigmoid(img)*255).astype("uint8"))
+            np.save(f"./src/static/embtmp{i}.npy", emb)
+
+    return jsonify({
+        "img_path1":f"../static/imgtmp1.jpg?{time}",
+        "img_path2":f"../static/imgtmp2.jpg?{time}",
+        "img_path3":f"../static/imgtmp3.jpg?{time}",
+        "img_path4":f"../static/imgtmp4.jpg?{time}",
+        "img_path5":f"../static/imgtmp5.jpg?{time}",
+        "img_path6":f"../static/imgtmp6.jpg?{time}",
+        "img_path7":f"../static/imgtmp7.jpg?{time}",
+        "img_path8":f"../static/imgtmp8.jpg?{time}",
+        "img_path9":f"../static/imgtmp9.jpg?{time}"})
+    # either spread image or do sth else

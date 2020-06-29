@@ -26,7 +26,7 @@ def main():
         tf.config.experimental.set_memory_growth(gpus[0], True)
 
 
-    path_ckpt  = expanduser('./ckpt/')
+    path_ckpt  = expanduser('~/models/')
     path_cond  = expanduser('~/data/eudata_conditionals.npz')
     path_data  = expanduser('~/data/imgs')
     path_log   = expanduser("~/cache/tensorboard-logdir/")

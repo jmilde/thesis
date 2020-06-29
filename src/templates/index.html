@@ -12,45 +12,74 @@
   </div>
   <div class="row">
     <div class="col-3">
-      <form action="/predict" method="POST">
-        <div class="py-3">
-          <h4>Text</h4>
-          <p>The text which is supposed to be displayed in the logo</p>
-          <input type="text" name="text" value={{text}} id="text" size="20" style="font-family:monospace">
+      <div class="py-3">
+        <h4>Text</h4>
+        <p>The text which is supposed to be displayed in the logo</p>
+        <input type="text" name="text" value={{text}} id="text" size="20" style="font-family:monospace">
+      </div>
+      <div class="py-3">
+        <h4>Colors</h4>
+        <p>Select up to 5 colors that shoud appear in the logo and the percentage to which the generated logo should contain it.
+          If the percentages sum up to over 100% then they are normalized, if below hundred then filled up with white.</p>
+        <div>
+          <input type="text" id="color_1" name="color_1" class="color-input" size="12" value={{color_1}}>
+          <input type="text" id="value_1" name="value_1" maxlength="3" size="3" style="font-family:monospace" value={{value_1}}>%
         </div>
-        <div class="py-3">
-          <h4>Colors</h4>
-          <p>Select up to 5 colors that shoud appear in the logo and the percentage to which the generated logo should contain it.
-            If the percentages sum up to over 100% then they are normalized, if below hundred then filled up with white.</p>
-          <div>
-            <input type="text" name="color_1" class="color-input" size="12" value={{color_1}}>
-            <input type="text" name="value_1" maxlength="3" size="3" style="font-family:monospace" value={{value_1}}>%
-          </div>
-          <div>
-            <input type="text" name="color_2" class="color-input" size="12" value={{color_2}}>
-            <input type="text" name="value_2" maxlength="3" size="3" style="font-family:monospace" value={{value_2}}>%
-          </div>
-          <div>
-            <input type="text" name="color_3" class="color-input" size="12" value={{color_3}}>
-            <input type="text" name="value_3" maxlength="3" size="3" style="font-family:monospace" value={{value_3}}>%
-          </div>
-          <div>
-            <input type="text" name="color_4" class="color-input" size="12" value={{color_4}}>
-            <input type="text" name="value_4" maxlength="3" size="3" style="font-family:monospace" value={{value_4}}>%
-          </div>
-          <div>
-            <input type="text" name="color_5" class="color-input" size="12" value={{color_5}}>
-            <input type="text" name="value_5" maxlength="3" size="3" style="font-family:monospace" value={{value_5}}>%
-          </div>
+        <div>
+          <input type="text" id="color_2" name="color_2" class="color-input" size="12" value={{color_2}}>
+          <input type="text" id="value_2" name="value_2" maxlength="3" size="3" style="font-family:monospace" value={{value_2}}>%
         </div>
-        <input type="submit" value="Generate">
-      </form>
+        <div>
+          <input type="text" id="color_3" name="color_3" class="color-input" size="12" value={{color_3}}>
+          <input type="text" id="value_3" name="value_3" maxlength="3" size="3" style="font-family:monospace" value={{value_3}}>%
+        </div>
+        <div>
+          <input type="text" id="color_4" name="color_4" class="color-input" size="12" value={{color_4}}>
+          <input type="text" id="value_4" name="value_4" maxlength="3" size="3" style="font-family:monospace" value={{value_4}}>%
+        </div>
+        <div>
+          <input type="text" id="color_5" name="color_5" class="color-input" size="12" value={{color_5}}>
+          <input type="text" id="value_5" name="value_5" maxlength="3" size="3" style="font-family:monospace" value={{value_5}}>%
+        </div>
+      </div>
+      <button id="btn_random" type="button" class="btn btn-success">random generation</button>
     </div>
-    <div class="col-9">
-      okay
+    <div class="col-9 text-center align-self-center">
+      <div class="row">
+        <div class="col-4">
+          <img class="img" id="img_1" src={{img_path1}}>
+        </div>
+        <div class="col-4">
+          <img class="img" id="img_2" src={{img_path2}}>
+        </div>
+        <div class="col-4">
+          <img class="img" id="img_3" src={{img_path3}}>
+        </div>
+      </div>
+      <div class="row py-4">
+        <div class="col-4">
+          <img class="img" id="img_4" src={{img_path4}}>
+        </div>
+        <div class="col-4">
+          <img class="img" id="img_5" src={{img_path5}}>
+        </div>
+        <div class="col-4">
+          <img class="img" id="img_6" src={{img_path6}}>
+        </div>
+      </div>
+      <div class="row">
+        <div class="col-4">
+          <img class="img" id="img_7" src={{img_path7}}>
+        </div>
+        <div class="col-4">
+          <img class="img" id="img_8" src={{img_path8}}>
+        </div>
+        <div class="col-4">
+          <img class="img" id="img_9" src={{img_path9}}>
+        </div>
+      </div>
     </div>
   </div>
-</div>
 </div>
 {% endblock %}
 

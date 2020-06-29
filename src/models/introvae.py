@@ -101,7 +101,7 @@ class INTROVAE(tf.keras.Model):
     #input_signature=[tf.TensorSpec(shape=(None,None,None,None), dtype=tf.float32),
                                   #tf.TensorSpec(shape=(None,None), dtype=tf.float32),
                                   #tf.TensorSpec(shape=(None,None), dtype=tf.int64)])
-    @tf.function
+    @tf.function(experimental_relax_shapes=True)
     def train_vae(self, x, colors, txts):
         with tf.GradientTape() as tape:
             output = self.vae_step(x, colors, txts, training=True)
@@ -260,7 +260,7 @@ class Decoder(tf.keras.layers.Layer):
 
         for layer in self.layers:
             x = layer(x, training=training)
-        return x
+        return x #tf.keras.activations.sigmoid(x) # in orignial paper no sigmoid somehow
 
 
 class GRU_bidirectional(tf.keras.layers.Layer):

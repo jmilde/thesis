@@ -7,12 +7,15 @@ all following code needs to be run from the project root.
 python 3.7 is required.
 
 - initialize
-
 #+BEGIN_SRC sh
 python3 -m venv env
 #+END_SRC
+- if you want to use the system's packages then run
+#+BEGIN_SRC sh
+python3 -m venv --system-site-packages env
+#+END_SRC
 
-- activate
+- then activate the virtual environment
 
 #+BEGIN_SRC sh
 source env/bin/activate
@@ -20,16 +23,19 @@ source env/bin/activate
 
 
 ** install dependencies
-
+- if you want to install your own tensorflow then add to the requirements.txt file
+  -> tensorflow-gpu==2.x.x (x.x being the minor version etc.)
+- also adapt the tensorflow-addons version in the requirements file:
+  -> tf=2.0.0 -> tensorflow-addons==0.6
+  -> tf=2.1    -> tensorflow-addons==0.9.1
 #+BEGIN_SRC sh
 pip install -U pip
 pip install -r requirements.txt
 #+END_SRC
 
 ** paths
-
 #+BEGIN_SRC sh
-mkdir data .//data/eudata
+mkdir data ./data/eudata
 #+END_SRC
 ** download data
 - from https://euipo.europa.eu/ohimportal/en/open-data download all trademark data into the folder "data/eudata"

@@ -8,4 +8,4 @@ sentencepiece==0.1.91
 tensorflow-addons==0.9.1
 tensorflow-gpu==2.1.1
 tqdm==4.40.2
-xmltodict==0.12.0n
+xmltodict==0.12.0

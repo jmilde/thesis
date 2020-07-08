@@ -9,6 +9,7 @@ import math
 import numpy as np
 import os
 import xmltodict
+import pandas as pd
 
 ### value to position
 #x=[[a,b,c] for a in range(0,256,85) for b in range(0,256,85) for c in range(0,256,85)]
@@ -46,21 +47,24 @@ def collect_paths(path_data):
     return [os.path.join(path, f) for path, dirs, files in tqdm(os.walk(path_data), total= 699399) for f in files if os.path.splitext(f)[1]==".xml"]
 
 
-def main(path_data, resize_size, path_out, batch_size):
+def main(path_data, path_data_lld, path_data_metu, path_lbls_metu, resize_size, path_out, batch_size):
     """
     preprocesses the data and saves it as a .npz file with the keys: imgs, colors, txts
     """
+
+
+    ##############
+    # EU DATASET #
+    ##############
     print("collecting all paths...")
     paths = np.array(collect_paths(path_data))
-    resize_size = np.repeat([resize_size], len(paths), axis=0)
+    resize_size_ = np.repeat([resize_size], len(paths), axis=0)
 
     print("processing the data")
-    #data=[prep(a,b) for a,b in tqdm(zip(paths, resize_size), total=len(paths))] # for debugging
-
-    for i, (paths_, resize_size_) in enumerate(zip(np.split(paths, batch_size), np.split(resize_size, batch_size))):
+    batch_nr = 0
+    for paths_, resize in zip(np.split(paths, batch_size), np.split(resize_size_, batch_size)):
         with concurrent.futures.ProcessPoolExecutor() as executor:
-            data = list(tqdm(executor.map(prep, paths_, resize_size_), total=len(paths_)))
-
+            data = list(tqdm(executor.map(prep, paths_, resize), total=len(paths_)))
 
         data = [d for d in data if d]
         print("getting images")
@@ -69,23 +73,106 @@ def main(path_data, resize_size, path_out, batch_size):
         txts = [d[1] for d in data]
         print("getting colors")
         colors = np.array([d[2] for d in data], dtype="float32")
-        print(f"saving to part to {path_out}eudata_prep{i}.npz")
-        np.savez_compressed(os.path.join(path_out, f"eudata_prep_pt{i}.npz"), imgs=imgs, colors=colors, txts=txts )
+        print(f"saving to part to {path_out}eudata_prep{batch_nr}.npz")
+        np.savez_compressed(os.path.join(path_out, f"eudata_prep_pt{batch_nr}.npz"), imgs=imgs, colors=colors, txts=txts )
+        batch_nr += 1
+
+    ##############################
+    # LARGE LOGO DATASET LOGANv2 #
+    ##############################
+    print("PROCESSING LLD")
+    paths = [os.path.join(path_data_lld, img) for img in os.listdir(path_data_lld)]
+    resize_size_ = np.repeat([resize_size], len(paths), axis=0)
+    with concurrent.futures.ProcessPoolExecutor() as executor:
+        data = list(tqdm(executor.map(prep_lld, paths, resize_size_), total=len(paths)))
+    print("getting images of LLD")
+    imgs = np.array([d[0] for d in data], dtype="uint8")
+    print("getting texts of LLD")
+    txts = [d[1] for d in data]
+    print("getting colors of LLD")
+    colors = np.array([d[2] for d in data], dtype="float32")
+    print(f"saving to part to {path_out}eudata_prep{batch_nr}.npz")
+    np.savez_compressed(os.path.join(path_out, f"eudata_prep_pt{batch_nr}.npz"), imgs=imgs, colors=colors, txts=txts )
+    batch_nr += 1
+
+    ################
+    # METU DATASET #
+    ################
+    print("PROCESSING METU")
+    print("get all paths")
+    df= pd.read_csv(path_lbls_metu, sep="\t", names=["path", "type"])
+    df["path"] = [p.split("/")[-1] if "pool" in p else "" for p in df["path"]]
+    df = df[df["path"]!=""]
+    paths = [os.path.join(path_data_metu,p) for p in df[df["type"]=="SHAPE"]["path"]]
+    resize_size_ = np.repeat([resize_size], len(paths), axis=0)
+    with concurrent.futures.ProcessPoolExecutor() as executor:
+        data = list(tqdm(executor.map(prep_metu, paths, resize_size_), total=len(paths)))
+    data = [d for d in data if d]
+    print("getting images for metu")
+    imgs = np.array([d[0] for d in data], dtype="uint8")
+    print("getting texts for metu")
+    txts = [d[1] for d in data]
+    print("getting colors for metu")
+    colors = np.array([d[2] for d in data], dtype="float32")
+    print(f"saving to part to {path_out}eudata_prep{batch_nr}.npz")
+    np.savez_compressed(os.path.join(path_out, f"eudata_prep_pt{batch_nr}.npz"), imgs=imgs, colors=colors, txts=txts )
+    batch_nr += 1
+
 
 
     print("final step: saving images")
     id_nr = 0
     colors, txts = [], []
-    for i in range(batch_size):
-        data = np.load(os.path.join(path_out, f"eudata_prep_pt1.npz"), allow_pickle=True)
-        for i in tqdm(data["imgs"]):
-            imsave(os.path.join(path_out, f"imgs/{id_nr}.png"), i)
+    for i in range(batch_nr):
+        data = np.load(os.path.join(path_out, f"eudata_prep_pt{i}.npz"), allow_pickle=True)
+        for j in tqdm(data["imgs"]):
+            imsave(os.path.join(path_out, f"imgs/{id_nr}.png"), j)
             id_nr+=1
         colors.extend(data["colors"])
         txts.extend(data["txts"])
+
+
+
     np.savez_compressed(os.path.join(path_out, f"eudata_conditionals.npz"), colors=colors, txts=txts)
     print(f"Done: saved all images in {path_out}imgs/ and the conditionals as eudata_conditionals.npz")
 
+def prep_lld(path, resize_size):
+    img = io.imread(path)
+    shape = img.shape
+
+
+    if ((len(shape)==3) and (shape[-1]>3))or((shape[0]<resize_size[0]) and (shape[1]<resize_size[0])): # skip over faulty images
+        return None
+    if len(img.shape)<3:
+        img = gray2rgb(img)
+    colors = get_colors(img)
+    return img.astype("uint8"), "", colors.astype("float32")
+
+
+def prep_metu(path, resize_size):
+    img = io.imread(path)
+    shape = img.shape
+
+    try:
+        if ((len(shape)==3) and (shape[-1]>3))or((shape[0]<resize_size[0]) and (shape[1]<resize_size[0])): # skip over faulty images
+            return None
+    except:
+        print("METU", shape, resize_size)
+    # resize image while keeping aspect ratio
+    if len(img.shape)<3:
+        img = gray2rgb(img)
+    ratio = min(resize_size[0]/shape[0], resize_size[1]/shape[1])
+    img_resized = resize(img, (int(shape[0]*ratio), int(shape[1]*ratio)))
+    colors = get_colors(img_resized)
+
+    pad_x = (resize_size[0]-img_resized.shape[0])
+    pad_x = (math.ceil(pad_x/2), math.floor(pad_x/2))
+    pad_y = (resize_size[1]-img_resized.shape[1])
+    pad_y = (math.ceil(pad_y/2), math.floor(pad_y/2))
+    paddings = (pad_x,pad_y,(0,0))
+    img_resized = np.pad(img_resized, paddings, constant_values=1)*255
+
+    return img_resized.astype("uint8"), "", colors.astype("float32")
 
 def prep(path, resize_size):
     with open(path) as fd:
@@ -120,8 +207,9 @@ def prep(path, resize_size):
                     img = io.imread(os.path.join(path_data, img_path.split("//")[1]))
                     shape = img.shape
 
-                    if len(shape)==3 and shape[-1]>3: # skip over faulty images
+                    if ((len(shape)==3) and (shape[-1]>3))or((shape[0]<resize_size[0]) and (shape[1]<resize_size[0])): # skip over faulty images
                         return None
+
 
                     # resize image while keeping aspect ratio
                     ratio = min(resize_size[0]/shape[0], resize_size[1]/shape[1])
@@ -144,16 +232,19 @@ def prep(path, resize_size):
                     colors = get_colors(img_resized)
                     return img_resized.astype("uint8"), displayed_text if displayed_text else "", colors.astype("float32")
         except Exception as e:
-            print(f"{e}: {path}, {img_path}")
-        return None
+            print(f"{e}: {path}")
+            return None
 
 if __name__=="__main__":
     path_data   = "../eudata_unpacked/"
+    path_data_lld = "../LOGOS_REFORMAT/"
+    path_data_metu = "../930k_logo_v3"
+    path_lbls_metu = "../METU_logo_type_info.csv"
     path_out    = "../"
-    batch_size=3 # batch size 2 needs ~ 135gb RAM
-    resize_size = (256,256,3)
+    batch_size= 3 # batch size 2 needs ~ 135gb RAM
+    resize_size = (128,128,3)
 
 
     if not os.path.isdir(os.path.join(path_out, "imgs")):
         os.mkdir(os.path.join(path_out, "imgs"))
-    main(path_data, resize_size, path_out, batch_size)
+    main(path_data, path_data_lld, path_data_metu, path_lbls_metu, resize_size, path_out, batch_size)

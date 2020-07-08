@@ -12,6 +12,7 @@ import tensorflow_addons as tfa
 from datetime import datetime
 import os
 from os.path import expanduser
+from src.hyperparameter import params
 
 def show_img(img, channel_first=False):
     if channel_first:
@@ -25,54 +26,49 @@ def main():
         tf.config.experimental.set_visible_devices(gpus[0], 'GPU')
         tf.config.experimental.set_memory_growth(gpus[0], True)
 
+    p = params["128"]
+    path_ckpt = p['path_ckpt']
+    path_cond = p['path_cond']
+    path_data = p['path_data']
+    path_log = p['path_log']
+    path_spm = p['path_spm']
+    restore_model = p['restore_model']
+    img_dim = p['img_dim']
+    btlnk = p['btlnk']
+    channels = p['channels']
+    cond_dim_color = p['cond_dim_color']
+    rnn_dim = p['rnn_dim']
+    cond_dim_txts = p['cond_dim_txts']
+    emb_dim = p['emb_dim']
+    dropout_conditionals = p['dropout_conditionals']
+    dropout_encoder_resblock = p['dropout_encoder_resblock']
+    vae_epochs = p['vae_epochs']
+    epochs = p['epochs']
+    batch_size = p['batch_size']
+    logs_per_epoch = p['logs_per_epoch']
+    normalizer_enc = p['normalizer_enc']
+    normalizer_dec = p['normalizer_dec']
+    weight_rec = p['weight_rec']
+    weight_kl = p['weight_kl']
+    weight_neg = p['weight_neg']
+    m_plus = p['m_plus']
+    lr_enc = p['lr_enc']
+    lr_dec = p['lr_dec']
+    beta1 = p['beta1']
 
-    path_ckpt  = expanduser('~/models/')
-    path_cond  = expanduser('~/data/eudata_conditionals.npz')
-    path_data  = expanduser('~/data/imgs')
-    path_log   = expanduser("~/cache/tensorboard-logdir/")
-    path_spm = expanduser("~/data/logo_vocab")
+    ds_size = len(np.load(path_cond, allow_pickle=True)["colors"])
+    cond_dim = len(np.load(path_cond, allow_pickle=True)["colors"][1])
+    model_name = f"VAE_RNNcolor{cond_dim_color}txts{cond_dim_txts}-pre{vae_epochs}-{','.join(str(x) for x in img_dim)}-m{m_plus}-lr{lr_enc}b{beta1}-w_rec{weight_rec}-rnn{rnn_dim}-emb{emb_dim}"
 
-    # restore pretrained?
-    restore_model = "" #empty or modelname for model stored at path_ckpt
-
-    # Data info
-    RESIZE_SIZE    = [256,256]
-    INPUT_CHANNELS = 3
-    img_dim        = RESIZE_SIZE + [INPUT_CHANNELS]
-    ds_size        = len(np.load(path_cond, allow_pickle=True)["colors"])
-    cond_dim       = len(np.load(path_cond, allow_pickle=True)["colors"][1])
-    cond_dim_color = 256 #64 #512
-    rnn_dim        = 128 # output= dimx2 because of bidirectional concat
-    cond_dim_txts  = 256
-    vocab_dim      = 8192 #hardcoded, could be looked up if spm is moved outside the batch function
-    emb_dim        = 128
-
-    epochs         = 0
-    batch_size     = 16
-    logfrq         = ds_size//100//batch_size # log ~100x per epoch
-    vae_epochs     = 10 # pretrain only vae
-    btlnk          = 512
-    channels       = [32, 64, 128, 256, 512, 512]
-
-    ### loss weights
-    #beta  0.01 - 100, larger β improves reconstruction quality but may influence sample diversity
-    weight_rec = 0.2 #0.05
-    weight_kl  = 1
-    weight_neg = 0.5 #alpha 0.1-0.5
-    m_plus     = 500 #265 #120 #  should be selected according to the value of β, to balance advaserial loss
-    lr_enc= 0.00005
-    lr_dec= 0.00005
-    beta1 = 0.9 #0.5
-    model_name = f"VAE_RNNcolor{cond_dim_color}txts{cond_dim_txts}-pre{vae_epochs}-{','.join(str(x) for x in RESIZE_SIZE)}-m{m_plus}-lr{lr_enc}b{beta1}-w_rec{weight_rec}-rnn{rnn_dim}-emb{emb_dim}"
-
+    logfrq = ds_size//logs_per_epoch//batch_size
     path_ckpt  = path_ckpt+model_name
 
     # load sentence piece model
     spm = load_spm(path_spm + ".model")
     spm.SetEncodeExtraOptions("bos:eos") # enable start(=2)/end(=1) symbols
-
+    vocab_dim = spm.vocab_size()
     #pipeline
-    #bg = batch_resize(path_data, batch_size, RESIZE_SIZE)
+    #bg = batch_resize(path_data, batch_size, img_dim)
     #data = pipe(lambda: bg, (tf.float32), prefetch=6)
     bg = batch_cond_spm(path_data, path_cond, spm, batch_size)
     data = pipe(lambda: bg, (tf.float32, tf.float32, tf.int64), (tf.TensorShape([None, None, None, None]), tf.TensorShape([None, None]), tf.TensorShape([None, None])), prefetch=6)
@@ -87,6 +83,8 @@ def main():
                      cond_dim_txts,
                      vocab_dim,
                      emb_dim,
+                     dropout_conditionals=0.3,
+                     dropout_encoder_resblock=0.3,
                      normalizer_enc = tf.keras.layers.BatchNormalization,
                      normalizer_dec = tf.keras.layers.BatchNormalization,
                      weight_rec=weight_rec,
@@ -111,7 +109,7 @@ def main():
                                net=model)
 
     if restore_model:
-        manager = tf.train.CheckpointManager(ckpt, path_ckpt, checkpoint_name=restore_model, max_to_keep=10)
+        manager = tf.train.CheckpointManager(ckpt, path_ckpt, checkpoint_name=model_name, max_to_keep=10)
         ckpt.restore(manager.latest_checkpoint)
         print("\nmodel restored\n")
 
@@ -127,6 +125,8 @@ def main():
                     with writer.as_default():
                         tf.summary.trace_export(name="introvae_vae", step=0, profiler_outdir=path_log)
                     model._set_inputs(*next(data))
+                    example_data=next(data)
+                    run_tests(model, writer,example_data[0][:4], example_data[1][:4], example_data[2][:4], spm, btlnk, batch_size=16, step=step)
 
                 # train step
                 output = model.train_vae(*next(data))
@@ -135,10 +135,10 @@ def main():
                 if step%logfrq==0:
                     with writer.as_default():
                          tf.summary.image( "vae_x",
-                                      spread_image(output["x"].numpy()[:16],4,4,RESIZE_SIZE[0],RESIZE_SIZE[1]),
+                                      spread_image(output["x"].numpy()[:16],4,4,img_dim[0],img_dim[1]),
                                       step=step)
                          tf.summary.image( "vae_x_rec",
-                                      spread_image(output["x_rec"].numpy()[:16],4,4,RESIZE_SIZE[0],RESIZE_SIZE[1]),
+                                      spread_image(output["x_rec"].numpy()[:16],4,4,img_dim[0],img_dim[1]),
                                       step=step)
                          tf.summary.scalar("vae_loss_rec" , output["loss_rec"].numpy() , step=step)
                          tf.summary.scalar("vae_loss_kl"  , output["loss_kl"].numpy()  , step=step)
@@ -176,16 +176,16 @@ def main():
                                                           output["x_r"].numpy()[:3],
                                                           output["x_p"].numpy()[:3]),
                                                     axis=0),
-                                          3,3,RESIZE_SIZE[0],RESIZE_SIZE[1]),
+                                          3,3,img_dim[0],img_dim[1]),
                                       step=step)
                     tf.summary.image( "x",
-                                      spread_image(output["x"].numpy()[:16],4,4,RESIZE_SIZE[0],RESIZE_SIZE[1]),
+                                      spread_image(output["x"].numpy()[:16],4,4,img_dim[0],img_dim[1]),
                                       step=step)
                     tf.summary.image( "x_r",
-                                      spread_image(output["x_r"].numpy()[:16],4,4,RESIZE_SIZE[0],RESIZE_SIZE[1]),
+                                      spread_image(output["x_r"].numpy()[:16],4,4,img_dim[0],img_dim[1]),
                                       step=step)
                     tf.summary.image( "x_p",
-                                      spread_image(output["x_p"].numpy()[:16],4,4,RESIZE_SIZE[0],RESIZE_SIZE[1]),
+                                      spread_image(output["x_p"].numpy()[:16],4,4,img_dim[0],img_dim[1]),
                                       step=step)
                     tf.summary.scalar("loss_enc" , output["loss_enc"].numpy() , step=step)
                     tf.summary.scalar("loss_dec" , output["loss_dec"].numpy() , step=step)

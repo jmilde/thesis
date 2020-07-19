@@ -11,6 +11,7 @@ import h5py
 import os
 import tensorflow as tf
 import tensorflow_addons as tfa
+from src.hyperparameter import params
 
 def show_img(img, channel_first=False):
     if channel_first:
@@ -23,10 +24,10 @@ def move_through_latent(z_a, z_b, nr_steps):
     step = np.asarray((z_b-z_a)/nr_steps)
     return [z_a + step*i for i in range(1, nr_steps+1)]
 
-def run_tests(model, writer, img_embs, colors, txts, spm, btlnk, batch_size=16, step=0):
+def run_tests(model, writer, img_embs, colors, txts, spm, btlnk, img_dim, batch_size=16, step=0):
         np.random.seed(27)
 
-        x_gen, zs_gen, x_txt = [], [],[]
+        x_gen, zs_gen, x_txt, x_color = [], [], [], []
         for img_emb, color, txt in zip(img_embs, colors, txts):
             # from random noise with color and txt from real examples
             x    = np.random.rand(batch_size, btlnk)
@@ -47,20 +48,73 @@ def run_tests(model, writer, img_embs, colors, txts, spm, btlnk, batch_size=16, 
             x_txt.extend(model.generate(x, cond_color, cond_txt))
 
             # color exploration
-            _, x, _ = model.encode(np.repeat(img_emb[np.newaxis, :], batch_size, axis=0))
-            cond_color = np.repeat(color[np.newaxis, :], batch_size, axis=0)
-            cond_txt = np.repeat(txt[np.newaxis, :], batch_size, axis=0)
-            x_txt.extend(model.generate(x, cond_color, cond_txt))
+            color_batchsize = 8
+            _, x, _ = model.encode(np.repeat(img_emb[np.newaxis, :],  color_batchsize, axis=0))
+            # blue, black, red, white/green, rainbow, türkis/red/white, black/gold/white
+            cond_color = np.array([[0.  , 0.  , 0.  , 0.  , 0.  , 0.58, 0.  , 0.  , 0.  , 0.  , 0.  ,
+                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.01,
+                                    0.01, 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
+                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.01, 0.  ,
+                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
+                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.39],
+                                   [0.93, 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
+                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.03,
+                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
+                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.03, 0.  ,
+                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
+                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ],
+                                   [0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
+                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.02, 0.  , 0.  , 0.  , 0.  ,
+                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
+                                    0.74, 0.  , 0.  , 0.  , 0.  , 0.01, 0.  , 0.  , 0.  , 0.  , 0.  ,
+                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
+                                    0.  , 0.  , 0.  , 0.01, 0.01, 0.  , 0.  , 0.  , 0.21],
+                                   [0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.05, 0.  ,
+                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
+                                    0.  , 0.  , 0.  , 0.09, 0.02, 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
+                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.03, 0.05, 0.  ,
+                                    0.  , 0.  , 0.02, 0.01, 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
+                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.73],
+                                   [0.  , 0.  , 0.  , 0.  , 0.  , 0.01, 0.02, 0.  , 0.  , 0.02, 0.  ,
+                                    0.04, 0.  , 0.  , 0.  , 0.  , 0.  , 0.03, 0.  , 0.  , 0.  , 0.  ,
+                                    0.02, 0.  , 0.01, 0.  , 0.03, 0.  , 0.  , 0.  , 0.  , 0.  , 0.02,
+                                    0.02, 0.04, 0.  , 0.01, 0.01, 0.01, 0.  , 0.  , 0.06, 0.01, 0.  ,
+                                    0.  , 0.  , 0.  , 0.  , 0.02, 0.  , 0.  , 0.  , 0.02, 0.01, 0.  ,
+                                    0.  , 0.04, 0.05, 0.01, 0.  , 0.  , 0.  , 0.01, 0.5 ],
+                                   [0.03, 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
+                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.01,
+                                    0.  , 0.  , 0.  , 0.  , 0.01, 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
+                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.02, 0.  ,
+                                    0.  , 0.  , 0.01, 0.38, 0.  , 0.  , 0.  , 0.  , 0.  , 0.05, 0.  ,
+                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.49],
+                                   [0.2 , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
+                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.16, 0.  , 0.  , 0.  , 0.02, 0.01,
+                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
+                                    0.  , 0.  , 0.  , 0.01, 0.04, 0.  , 0.  , 0.01, 0.12, 0.  , 0.  ,
+                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
+                                    0.  , 0.  , 0.19, 0.01, 0.  , 0.  , 0.01, 0.02, 0.21],
+                                   [0.  , 0.  , 0.  , 0.  , 0.  , 0.1 , 0.  , 0.  , 0.  , 0.  , 0.  ,
+                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
+                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
+                                    0.11, 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.16, 0.01, 0.  ,
+                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
+                                    0.  , 0.  , 0.  , 0.01, 0.  , 0.  , 0.  , 0.  , 0.59],
+            ])
+            cond_txt = np.repeat(txt[np.newaxis, :],  color_batchsize , axis=0)
+            x_color.extend(model.generate(x, cond_color, cond_txt))
 
         with writer.as_default():
             tf.summary.image( "change_x",
-                              spread_image(x_gen,1*len(colors),16,256,256),
+                              spread_image(x_gen,1*len(colors),batch_size,img_dim[0],img_dim[1]),
                               step=step)
             tf.summary.image( "latent_walk",
-                              spread_image(zs_gen,1*len(colors),16,256,256),
+                              spread_image(zs_gen,1*len(colors),batch_size,img_dim[0],img_dim[1]),
                               step=step)
             tf.summary.image( "change_text",
-                              spread_image(zs_gen,1*len(colors),16,256,256),
+                              spread_image(x_txt,1*len(colors),batch_size,img_dim[0],img_dim[1]),
+                              step=step)
+            tf.summary.image( "change_color",
+                              spread_image(x_color,1*len(colors),color_batchsize, img_dim[0],img_dim[1]),
                               step=step)
             writer.flush()
 
@@ -71,50 +125,50 @@ def load_model():
         tf.config.experimental.set_visible_devices(gpus[0], 'GPU')
         tf.config.experimental.set_memory_growth(gpus[0], True)
 
-    path_ckpt  = expanduser('~/models/')
-    path_cond  = expanduser('~/data/eudata_conditionals.npz')
-    path_data  = expanduser('~/data/imgs')
-    path_log   = expanduser("~/cache/tensorboard-logdir/")
-    path_spm = expanduser("~/data/logo_vocab")
+    p = params["for_flask"]
+    path_ckpt = p['path_ckpt']
+    path_cond = p['path_cond']
+    path_data = p['path_data']
+    path_log = p['path_log']
+    path_spm = p['path_spm']
+    restore_model = p['restore_model']
+    img_dim = p['img_dim']
+    btlnk = p['btlnk']
+    channels = p['channels']
+    cond_dim_color = p['cond_dim_color']
+    rnn_dim = p['rnn_dim']
+    cond_dim_txts = p['cond_dim_txts']
+    emb_dim = p['emb_dim']
+    dropout_conditionals = p['dropout_conditionals']
+    dropout_encoder_resblock = p['dropout_encoder_resblock']
+    vae_epochs = p['vae_epochs']
+    epochs = p['epochs']
+    batch_size = p['batch_size']
+    logs_per_epoch = p['logs_per_epoch']
+    normalizer_enc = p['normalizer_enc']
+    normalizer_dec = p['normalizer_dec']
+    weight_rec = p['weight_rec']
+    weight_kl = p['weight_kl']
+    weight_neg = p['weight_neg']
+    m_plus = p['m_plus']
+    lr_enc = p['lr_enc']
+    lr_dec = p['lr_dec']
+    beta1 = p['beta1']
+    noise_color = p['noise_color']
+    noise_txt = p['noise_txt']
+    noise_img = p['noise_img']
 
-    # restore pretrained?
-    restore_model = "" #empty or modelname for model stored at path_ckpt
+    ds_size = len(np.load(path_cond, allow_pickle=True)["colors"])
+    cond_dim = len(np.load(path_cond, allow_pickle=True)["colors"][1])
+    model_name = f"VAE_RNNcolor{cond_dim_color}txts{cond_dim_txts}-pre{vae_epochs}-{','.join(str(x) for x in img_dim)}-m{m_plus}-lr{lr_enc}b{beta1}-w_rec{weight_rec}-rnn{rnn_dim}-emb{emb_dim}"
 
-    # Data info
-    RESIZE_SIZE    = [256,256]
-    INPUT_CHANNELS = 3
-    img_dim        = RESIZE_SIZE + [INPUT_CHANNELS]
-    ds_size        = len(np.load(path_cond, allow_pickle=True)["colors"])
-    cond_dim       = len(np.load(path_cond, allow_pickle=True)["colors"][1])
-    cond_dim_color = 256 #64 #512
-    rnn_dim        = 128 # output= dimx2 because of bidirectional concat
-    cond_dim_txts  = 256
-    vocab_dim      = 8192 #hardcoded, could be looked up if spm is moved outside the batch function
-    emb_dim        = 128
-
-    epochs         = 0
-    batch_size     = 16
-    logfrq         = ds_size//100//batch_size # log ~100x per epoch
-    vae_epochs     = 10 # pretrain only vae
-    btlnk          = 512
-    channels       = [32, 64, 128, 256, 512, 512]
-
-    ### loss weights
-    #beta  0.01 - 100, larger β improves reconstruction quality but may influence sample diversity
-    weight_rec = 0.2 #0.05
-    weight_kl  = 1
-    weight_neg = 0.5 #alpha 0.1-0.5
-    m_plus     = 500 #265 #120 #  should be selected according to the value of β, to balance advaserial loss
-    lr_enc= 0.00005
-    lr_dec= 0.00005
-    beta1 = 0.9 #0.5
-    model_name = f"VAE_RNNcolor{cond_dim_color}txts{cond_dim_txts}-pre{vae_epochs}-{','.join(str(x) for x in RESIZE_SIZE)}-m{m_plus}-lr{lr_enc}b{beta1}-w_rec{weight_rec}-rnn{rnn_dim}-emb{emb_dim}"
-
+    logfrq = ds_size//logs_per_epoch//batch_size
     path_ckpt  = path_ckpt+model_name
 
     # load sentence piece model
     spm = load_spm(path_spm + ".model")
     spm.SetEncodeExtraOptions("bos:eos") # enable start(=2)/end(=1) symbols
+    vocab_dim = spm.vocab_size()
 
     #pipeline
     #bg = batch_resize(path_data, batch_size, RESIZE_SIZE)
@@ -140,7 +194,10 @@ def load_model():
                      m_plus = m_plus,
                      lr_enc= lr_enc,
                      lr_dec= lr_dec,
-                     beta1 = beta1)
+                     beta1 = beta1,
+                     noise_color =noise_color,
+                     noise_txt =noise_txt,
+                     noise_img =noise_img,)
     # checkpoints
     ckpt = tf.train.Checkpoint(step=tf.Variable(1),
                                net=model)

@@ -14,7 +14,8 @@ import os
 from os.path import expanduser
 from src.hyperparameter import params
 
-def show_img(img, channel_first=False):
+def show_img(
+        img, channel_first=False):
     if channel_first:
         img = np.rollaxis(img, 0,3)
     plt.imshow(img)
@@ -26,7 +27,7 @@ def main():
         tf.config.experimental.set_visible_devices(gpus[0], 'GPU')
         tf.config.experimental.set_memory_growth(gpus[0], True)
 
-    p = params["128"]
+    p = params["Intro"]
     path_ckpt = p['path_ckpt']
     path_cond = p['path_cond']
     path_data = p['path_data']
@@ -55,10 +56,12 @@ def main():
     lr_enc = p['lr_enc']
     lr_dec = p['lr_dec']
     beta1 = p['beta1']
-
+    noise_color = p['noise_color']
+    noise_txt = p['noise_txt']
+    noise_img = p['noise_img']
     ds_size = len(np.load(path_cond, allow_pickle=True)["colors"])
     cond_dim = len(np.load(path_cond, allow_pickle=True)["colors"][1])
-    model_name = f"VAE_RNNcolor{cond_dim_color}txts{cond_dim_txts}-pre{vae_epochs}-{','.join(str(x) for x in img_dim)}-m{m_plus}-lr{lr_enc}b{beta1}-w_rec{weight_rec}-rnn{rnn_dim}-emb{emb_dim}"
+    model_name = f"Intro_RNNcolor{cond_dim_color}txts{cond_dim_txts}-pre{vae_epochs}-{','.join(str(x) for x in img_dim)}-m{m_plus}-lr{lr_enc}b{beta1}-w_rec{weight_rec}-rnn{rnn_dim}-emb{emb_dim}"
 
     logfrq = ds_size//logs_per_epoch//batch_size
     path_ckpt  = path_ckpt+model_name
@@ -93,9 +96,10 @@ def main():
                      m_plus = m_plus,
                      lr_enc= lr_enc,
                      lr_dec= lr_dec,
-                     beta1 = beta1)
-
-
+                     beta1 = beta1,
+                     noise_color =noise_color,
+                     noise_txt =noise_txt,
+                     noise_img =noise_img,)
 
     # workaround for memoryleak ?
     tf.keras.backend.clear_session()
@@ -113,7 +117,8 @@ def main():
         ckpt.restore(manager.latest_checkpoint)
         print("\nmodel restored\n")
 
-
+    # for logging
+    example_data=next(data)
 
     if vae_epochs:
         manager = tf.train.CheckpointManager(ckpt, path_ckpt, max_to_keep=3, checkpoint_name=model_name + "_VAEpretrain")
@@ -125,8 +130,7 @@ def main():
                     with writer.as_default():
                         tf.summary.trace_export(name="introvae_vae", step=0, profiler_outdir=path_log)
                     model._set_inputs(*next(data))
-                    example_data=next(data)
-                    run_tests(model, writer,example_data[0][:4], example_data[1][:4], example_data[2][:4], spm, btlnk, batch_size=16, step=step)
+                    run_tests(model, writer,example_data[0][:4], example_data[1][:4], example_data[2][:4], spm, btlnk, img_dim, batch_size=16, step=step,)
 
                 # train step
                 output = model.train_vae(*next(data))
@@ -143,8 +147,7 @@ def main():
                          tf.summary.scalar("vae_loss_rec" , output["loss_rec"].numpy() , step=step)
                          tf.summary.scalar("vae_loss_kl"  , output["loss_kl"].numpy()  , step=step)
                 if step%(logfrq*10)==0:
-                    example_data=next(data)
-                    run_tests(model, writer,example_data[0][:4], example_data[1][:4], example_data[2][:4], spm, btlnk, batch_size=16, step=step)
+                    run_tests(model, writer,example_data[0][:4], example_data[1][:4], example_data[2][:4], spm, btlnk, img_dim, batch_size=16, step=step,)
 
         save_path = manager.save()
         print("\nsaved VAE-model\n")
@@ -200,8 +203,7 @@ def main():
                     writer.flush()
 
             if step%(logfrq*10)==0:
-                    example_data=next(data)
-                    run_tests(model, writer,example_data[0][:4], example_data[1][:4], example_data[2][:4], spm, btlnk, batch_size=16, step=step)
+                    run_tests(model, writer,example_data[0][:4], example_data[1][:4], example_data[2][:4], spm, btlnk, img_dim, batch_size=16, step=step,)
 
         # save model every epoch
         save_path = manager.save()

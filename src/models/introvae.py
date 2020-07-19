@@ -5,18 +5,21 @@ from src.util_tf import ResBlock, VariationalEncoding, downsampling_res_block, u
 class INTROVAE(tf.keras.Model):
     def __init__(self, inpt_dim, channels, btlnk, batch_size, cond_dim_colors,
                  rnn_dim, cond_dim_txts, vocab_dim, emb_dim,
-                 normalizer_enc=tf.keras.layers.BatchNormalization,
-                 normalizer_dec=tf.keras.layers.BatchNormalization,
-                 name="Introvae",
-                 weight_rec=1,
-                 weight_kl=1,
-                 weight_neg = 1,
-                 m_plus = 100,
-                 lr_enc= 0.0002,
-                 lr_dec= 0.0002,
-                 beta1 = 0.5,
-                 dropout_conditionals=0.3,
-                 dropout_encoder_resblock=0.3,
+                 normalizer_enc           = tf.keras.layers.BatchNormalization,
+                 normalizer_dec           = tf.keras.layers.BatchNormalization,
+                 name                     = "Introvae",
+                 weight_rec               = 1,
+                 weight_kl                = 1,
+                 weight_neg               = 1,
+                 m_plus                   = 100,
+                 lr_enc                   = 0.0002,
+                 lr_dec                   = 0.0002,
+                 beta1                    = 0.5,
+                 noise_color              = 0.1,
+                 noise_txt                = 0.1,
+                 noise_img                = 0.1,
+                 dropout_conditionals     = 0.3,
+                 dropout_encoder_resblock = 0.3,
                  **kwargs):
         super(INTROVAE, self).__init__(name=name, **kwargs)
 
@@ -38,6 +41,10 @@ class INTROVAE(tf.keras.Model):
         self.dense_cond_txt   = tf.keras.layers.Dense(cond_dim_txts, name="dense_cond_txt")
         self.dropout_color    = tf.keras.layers.Dropout(dropout_conditionals)
         self.dropout_txt      = tf.keras.layers.Dropout(dropout_conditionals)
+        self.noise_color      = tf.keras.layers.GaussianNoise(noise_color)
+        self.noise_txt        = tf.keras.layers.GaussianNoise(noise_txt)
+        self.noise_img        = tf.keras.layers.GaussianNoise(noise_img)
+
         # decoding
         self.decoder= Decoder(inpt_dim, channels[::-1], normalizer=normalizer_dec)
 
@@ -54,7 +61,6 @@ class INTROVAE(tf.keras.Model):
         return self.decoder(x)
 
     def kl_loss(self, mu, lv):
-        #my_kl =  tf.reduce_mean(0.5 * (tf.square(mu) + tf.exp(lv) - lv - 1.0))
         return tf.reduce_mean(-0.5 * tf.reduce_sum((-1*(tf.square(-mu)+tf.exp(lv))+1+lv),-1))+0.0
 
     def mse_loss(self, x, x_rec, size_average=True):
@@ -65,12 +71,18 @@ class INTROVAE(tf.keras.Model):
             return tf.reduce_sum(x)+0.0
 
     def generate(self, x, color, spm_txt, training=False):
-        cond_color = self.dropout_color(self.relu(self.dense_cond_color(color)), training=training)
-        cond_txts  = self.dropout_txt(self.relu(self.dense_cond_txt(self.RNN(spm_txt))), training=training)
+        ## concatenating
+        x = self.noise_img(x, training=training)
+        cond_color = self.dropout_color(self.noise_color(self.relu(self.dense_cond_color(color)), training=training), training=training)
+        cond_txts  = self.dropout_txt(self.noise_txt(self.relu(self.dense_cond_txt(self.RNN(spm_txt))), training=training), training=training)
         return self.decode(tf.concat([x, cond_color, cond_txts], 1))
+        ## adding
+        #cond_color = self.dense_cond_color(color)
+        #cond_txts  = self.dense_cond_txt(self.RNN(spm_txt))
+        #return self.decode(x+cond_color+cond_txts)
 
     def vae_step(self, x, colors, txts, training=True):
-        x         = self.inpt_layer(x)
+        x         = self.noise_img(self.inpt_layer(x), training=training)
         x_color   = self.inpt_layer_cond(colors)
         x_txt     = self.inpt_layer_txt(txts)
 
@@ -78,12 +90,26 @@ class INTROVAE(tf.keras.Model):
         z, mu, lv = self.encode(x, training=training)  # encode real image
 
         # conditionals
-        cond_color = self.dropout_color(self.relu(self.dense_cond_color(x_color)), training=training)
-        cond_txts  = self.dropout_txt(self.relu(self.dense_cond_txt(self.RNN(x_txt))), training=training)
+        ## concat
+        cond_color = self.dropout_color(
+            self.noise_color(
+                self.relu(
+                    self.dense_cond_color(x_color)),
+                training=training), training=training)
+        cond_txts  = self.dropout_txt(
+            self.noise_txt(
+                self.relu(
+                    self.dense_cond_txt(self.RNN(x_txt))),
+                training=training),
+            training=training)
+
+        ## adding
+        cond_color = self.dense_cond_color(x_color)
+        cond_txts  = self.dense_cond_txt(self.RNN(x_txt))
 
         # decode
-        x_rec = self.decode(tf.concat([z, cond_color, cond_txts], 1), training=training)  # reconstruct real image
-
+        #x_rec = self.decode(tf.concat([z, cond_color, cond_txts], 1), training=training)  # reconstruct real image
+        x_rec = self.decode(z+cond_color+cond_txts, training=training)
         # kl loss
         loss_kl = self.kl_loss(mu, lv)
 
@@ -109,7 +135,7 @@ class INTROVAE(tf.keras.Model):
         self.optimizer_enc.apply_gradients(zip(tape.gradient(loss, self.trainable_variables), self.trainable_variables))
         return output
 
-    @tf.function
+
     def call(self, x, colors, txts, training=True):
         # inpts
         x         = self.inpt_layer(x)
@@ -170,7 +196,7 @@ class INTROVAE(tf.keras.Model):
                 "lv"       : tf.reduce_mean(lv)}
 
 
-    @tf.function
+    @tf.function(experimental_relax_shapes=True)
     def train(self, x, colors, txts,):
         with tf.GradientTape() as e_tape, tf.GradientTape() as d_tape:
             output = self.call(x, colors, txts, training = True)

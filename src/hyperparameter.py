@@ -73,10 +73,10 @@ params = {
         'normalizer_dec': tf.keras.layers.BatchNormalization,
 
         ### loss weights
-        "weight_rec": 0.2, #beta  0.01 - 100, larger β improves reconstruction quality but may influence sample diversity
+        "weight_rec": 0.5, # og:0.25, beta  0.01 - 100, larger β improves reconstruction quality but may influence sample diversity
         "weight_kl": 1,
-        "weight_neg": 0.5, #alpha 0.1-0.5
-        "m_plus": 250, # should be selected according to the value of β, to balance advaserial loss
+        "weight_neg": 0.25, #og:0.25, alpha 0.1-0.5
+        "m_plus": 250, #og:110, #250 should be selected according to the value of β, to balance advaserial loss
         "lr_enc":0.0002,
         "lr_dec":0.0002,
         "beta1": 0.9},

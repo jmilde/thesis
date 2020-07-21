@@ -76,6 +76,7 @@ def main():
     bg = batch_cond_spm(path_data, path_cond, spm, batch_size)
     data = pipe(lambda: bg, (tf.float32, tf.float32, tf.int64), (tf.TensorShape([None, None, None, None]), tf.TensorShape([None, None]), tf.TensorShape([None, None])), prefetch=6)
 
+
     # model
     model = INTROVAE(img_dim,
                      channels,

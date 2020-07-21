@@ -125,6 +125,7 @@ class INTROVAE(tf.keras.Model):
         loss_rec =  self.mse_loss(x, x_r)
 
 
+
         # no gradient flow for encoder
         _, mu_r_, lv_r_ = self.encode(tf.stop_gradient(x_r), training=training) # encode reconstruction
         _, mu_p_, lv_p_ = self.encode(tf.stop_gradient(x_p), training=training) # encode fake
@@ -149,6 +150,7 @@ class INTROVAE(tf.keras.Model):
         kl_fake = self.kl_loss(mu_p, lv_p)
         loss_dec_adv = 0.5*(kl_rec + kl_fake)
         loss_dec = loss_dec_adv * self.weight_kl + loss_rec * self.weight_rec
+
 
 
         return {"x"        : x,

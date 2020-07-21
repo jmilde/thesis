@@ -6,8 +6,6 @@ from collections import defaultdict
 import pandas as pd
 import json
 
-
-
 def run():
     auth = OAuth1("6ddae208a548427eb559685f98ba0b25", "7a4d8b6b9b5d44f7b0a44e809c591a40")
     #https://www.wordexample.com/list/most-common-verbs-english
@@ -19,14 +17,12 @@ def run():
     #df.to_csv("./data/searchwords.csv", sep=";", encoding="utf8")
 
     df = pd.read_csv("./data/iconDS/searchwords.csv", header=None)
-    old_searchwords = list(set(df[0]))
+    searchwords = list(set(df[0]))
 
-    df_labels = pd.read_csv("./data/iconDS/labels.csv", sep=";", index_col=0, header=0)
-    new_labels = set([xx.lower() for x in set(df_labels["tags"]) for xx in str(x).split() if len(xx)>2])
-    searchwords = [str(x).lower() for x in new_labels if str(x).lower() not in old_searchwords]
+    df_labels = pd.read_csv("./data/iconDS/labels.csv")
 
     labels = defaultdict(lambda : defaultdict())
-    for searchword in tqdm(searchwords[:1514]):
+    for searchword in tqdm(searchwords[10:]):
         endpoint = f"http://api.thenounproject.com/icons/{searchword}?limit_to_public_domain=1&limit=1000"
         response = requests.get(endpoint, auth=auth)
         content  = response.content
@@ -56,7 +52,7 @@ def run():
 
     data =[[k,*[vv for vv in v.values()]] for k,v in labels.items()]
     df = pd.DataFrame(data, columns=["ID", "img_url", "permalink", "tags", "searchword"])
-    df.to_csv("./data/iconDS/labels_new.csv", sep=";", encoding="utf-8")
+    df.to_csv("./data/iconDS/labels.csv", sep=";", encoding="utf-8")
 
 
 if __name__=="__main__":

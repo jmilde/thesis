@@ -72,6 +72,15 @@ def closest_colour(requested_colour):
         min_colours[(rd + gd + bd)] = name
     return min_colours[min(min_colours.keys())]
 
+def unison_shfl(l1, l2, SEED=25):
+    l1_shfl, l2_shfl = [], []
+    shfl_idx = np.arange(len(l1))
+    np.random.seed(SEED)
+    np.random.shuffle(shfl_idx)
+    for i in shfl_idx:
+        l1_shfl.append(l1[i])
+        l2_shfl.append(l2[i])
+    return l1_shfl, l2_shfl
 
 def get_colour_name(requested_colour):
     try:
@@ -107,10 +116,13 @@ def get_colors_old(img):
     clt.fit(img)
     hist = find_histogram(clt)
     output = np.zeros(12)
-    output[color2nr[
-        get_shade(
-            get_colour_name(
-                clt.cluster_centers_[max(range(len(hist)), key=hist.__getitem__)]))]]=1
+    hist, cluster_centers = zip(*sorted(zip(hist, clt.cluster_centers_)))
+    color = get_shade(get_colour_name(cluster_centers[-1]))
+    print("color1:", color)
+    if color =="white":
+        color = get_shade(get_colour_name(cluster_centers[-2]))
+        print("color2:", color)
+    output[color2nr[color]]=1
     return output
 
 

@@ -27,7 +27,8 @@ def main():
         tf.config.experimental.set_visible_devices(gpus[0], 'GPU')
         tf.config.experimental.set_memory_growth(gpus[0], True)
 
-    p = params["Intro"]
+    p = params["train"]
+
     path_ckpt = p['path_ckpt']
     path_cond = p['path_cond']
     path_data = p['path_data']
@@ -60,8 +61,23 @@ def main():
     noise_txt = p['noise_txt']
     noise_img = p['noise_img']
     ds_size = len(np.load(path_cond, allow_pickle=True)["colors"])
-    cond_dim = len(np.load(path_cond, allow_pickle=True)["colors"][1])
-    model_name = f"Intro_RNNcolor{cond_dim_color}txts{cond_dim_txts}-pre{vae_epochs}-{','.join(str(x) for x in img_dim)}-m{m_plus}-lr{lr_enc}b{beta1}-w_rec{weight_rec}-rnn{rnn_dim}-emb{emb_dim}"
+    color_cond_type = p['color_cond_type']
+    txt_cond_type = p['txt_cond_type']
+    color_cond_dim = len(np.load(path_cond, allow_pickle=True)["colors_old" if color_cond_type=="one_hot" else "colors"][1])
+
+
+    if p["vae_epochs"] and p["epochs"]:
+        modeltype = f"INTRO{p['epochs']}_pre{p['vae_epochs']}-m{m_plus}-lr{lr_enc}b{beta1}-w_rec{weight_rec}-w_neg{weight_neg}"
+    elif p["epochs"]:
+        modeltype = f"INTRO{p['epochs']}-m{m_plus}-lr{lr_enc}b{beta1}-w_rec{weight_rec}-w_neg{weight_neg}-w_neg{weight_neg}"
+    else:
+        modeltype = f"VAE{p['vae_epochs']}"
+    txt_info   = f"txt:({txt_cond_type}-dense{cond_dim_txts}-rnn{rnn_dim}-emb{emb_dim})"  if color_cond_type else ""
+    color_info = f"color:({color_cond_type}{cond_dim_color})" if color_cond_type else ""
+    model_name = (f"{modeltype}"
+                  f"{color_info}"
+                  f"{txt_info}"
+                  f"{','.join(str(x) for x in img_dim)}")
 
     logfrq = ds_size//logs_per_epoch//batch_size
     path_ckpt  = path_ckpt+model_name
@@ -73,7 +89,7 @@ def main():
     #pipeline
     #bg = batch_resize(path_data, batch_size, img_dim)
     #data = pipe(lambda: bg, (tf.float32), prefetch=6)
-    bg = batch_cond_spm(path_data, path_cond, spm, batch_size)
+    bg = batch_cond_spm(path_data, path_cond, spm, batch_size, color_cond_type)
     data = pipe(lambda: bg, (tf.float32, tf.float32, tf.int64), (tf.TensorShape([None, None, None, None]), tf.TensorShape([None, None]), tf.TensorShape([None, None])), prefetch=6)
 
 
@@ -87,8 +103,11 @@ def main():
                      cond_dim_txts,
                      vocab_dim,
                      emb_dim,
-                     dropout_conditionals=0.3,
-                     dropout_encoder_resblock=0.3,
+                     color_cond_dim,
+                     color_cond_type,
+                     txt_cond_type,
+                     dropout_conditionals=dropout_conditionals,
+                     dropout_encoder_resblock=dropout_encoder_resblock,
                      normalizer_enc = tf.keras.layers.BatchNormalization,
                      normalizer_dec = tf.keras.layers.BatchNormalization,
                      weight_rec=weight_rec,
@@ -130,8 +149,10 @@ def main():
                 if step==1:
                     with writer.as_default():
                         tf.summary.trace_export(name="introvae_vae", step=0, profiler_outdir=path_log)
-                    model._set_inputs(*next(data))
-                    run_tests(model, writer,example_data[0][:4], example_data[1][:4], example_data[2][:4], spm, btlnk, img_dim, batch_size=16, step=step,)
+                    run_tests(model, writer,example_data[0][:4], example_data[1][:4],
+                              example_data[2][:4], spm, btlnk,
+                              img_dim, batch_size=16, step=step,)
+
 
                 # train step
                 output = model.train_vae(*next(data))
@@ -148,7 +169,9 @@ def main():
                          tf.summary.scalar("vae_loss_rec" , output["loss_rec"].numpy() , step=step)
                          tf.summary.scalar("vae_loss_kl"  , output["loss_kl"].numpy()  , step=step)
                 if step%(logfrq*10)==0:
-                    run_tests(model, writer,example_data[0][:4], example_data[1][:4], example_data[2][:4], spm, btlnk, img_dim, batch_size=16, step=step,)
+                    run_tests(model, writer,example_data[0][:4], example_data[1][:4],
+                              example_data[2][:4], spm, btlnk,
+                              img_dim, batch_size=16, step=step,)
 
         save_path = manager.save()
         print("\nsaved VAE-model\n")
@@ -171,6 +194,9 @@ def main():
             if step==1 and not vae_epochs:
                 with writer.as_default():
                     tf.summary.trace_export(name="introvae", step=0, profiler_outdir=path_log)
+                run_tests(model, writer,example_data[0][:4], example_data[1][:4],
+                          example_data[2][:4], spm, btlnk,
+                          img_dim, batch_size=16, step=step,)
             # logging
             if step%logfrq==0:
                 with writer.as_default():
@@ -204,7 +230,9 @@ def main():
                     writer.flush()
 
             if step%(logfrq*10)==0:
-                    run_tests(model, writer,example_data[0][:4], example_data[1][:4], example_data[2][:4], spm, btlnk, img_dim, batch_size=16, step=step,)
+                 run_tests(model, writer,example_data[0][:4], example_data[1][:4],
+                              example_data[2][:4], spm, btlnk,
+                              img_dim, batch_size=16, step=step,)
 
         # save model every epoch
         save_path = manager.save()

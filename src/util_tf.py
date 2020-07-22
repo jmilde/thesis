@@ -16,9 +16,15 @@ def spread_image(x, nrow, ncol, height, width):
             , (0, 2, 1, 3, 4))
         , (1, nrow * height, ncol * width, -1))
 
-def batch_cond_spm(path_imgs, path_cond, spm, batch_size, seed=26):
-    """batch function to use with pipe"""
-    colors = np.load(path_cond, allow_pickle=True)["colors"]
+def batch_cond_spm(path_imgs, path_cond, spm, batch_size, cond_type="old", seed=26):
+    """batch function to use with pipe
+    cond_type = 'one_hot' or 'continuous'
+    """
+    if cond_type=="one_hot":
+        color_cond = "colors_old"
+    else:
+        color_cond = "colors"
+    colors = np.load(path_cond, allow_pickle=True)[color_cond]
     txts = np.load(path_cond, allow_pickle=True)["txts"]
 
     i, c, t = [], [], []
@@ -30,6 +36,7 @@ def batch_cond_spm(path_imgs, path_cond, spm, batch_size, seed=26):
         i.append(io.imread(os.path.join(path_imgs, f"{j}.png"))/255)
         c.append(colors[j])
         t.append(spm.encode_as_ids(txts[j]))
+
 
 
 def batch(path, batch_size, seed=26, channel_first=False):

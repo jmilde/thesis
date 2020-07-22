@@ -19,89 +19,120 @@ def show_img(img, channel_first=False):
     plt.imshow(img)
     plt.show()
 
+def decode_options(model, x, cond_color=None, cond_txt=None):
+    if model.txt_cond_type and model.color_cond_type:
+        return model.decode(x, cond_color, cond_txt)
+    elif model.color_cond_type:
+        return model.decode(x, color=cond_color)
+    elif model.txt_cond_type:
+        return model.decode(x, txt=cond_txt)
+    else:
+        return model.decode(x)
+
 def move_through_latent(z_a, z_b, nr_steps):
     z_a, z_b = np.asarray(z_a), np.array(z_b)
     step = np.asarray((z_b-z_a)/nr_steps)
-    return [z_a + step*i for i in range(1, nr_steps+1)]
+    return np.array([z_a + step*i for i in range(1, nr_steps+1)])
 
-def run_tests(model, writer, img_embs, colors, txts, spm, btlnk, img_dim, batch_size=16, step=0):
+def run_tests(model, writer, img_embs, colors, txts, spm, btlnk, img_dim,
+              batch_size=16, step=0):
         np.random.seed(27)
 
         x_gen, zs_gen, x_txt, x_color = [], [], [], []
         for img_emb, color, txt in zip(img_embs, colors, txts):
+
             # from random noise with color and txt from real examples
             x    = np.random.rand(batch_size, btlnk)
-            cond_color = np.repeat(color[np.newaxis, :], batch_size, axis=0)
-            cond_txt = np.repeat(txt[np.newaxis, :], batch_size, axis=0)
-            x_gen.extend(model.generate(x, cond_color, cond_txt))
+            cond_color = None
+            if model.color_cond_type:
+                cond_color = np.repeat(color[np.newaxis, :], batch_size, axis=0)
+            cond_txt = None
+            if model.txt_cond_type:
+                cond_txt = np.repeat(txt[np.newaxis, :], batch_size, axis=0)
+            x_gen.extend(decode_options(model,x, cond_color, cond_txt))
 
             # latent space walk from real image to random point
             _, mu, _ = model.encode(img_emb[np.newaxis, :])
             zs = move_through_latent(mu[0], x[0], batch_size)
-            zs_gen.extend(model.generate(zs, cond_color, cond_txt))
+            zs_gen.extend(decode_options(model, zs, cond_color, cond_txt))
 
             # text exploration
-            _, x, _ = model.encode(np.repeat(img_emb[np.newaxis, :], batch_size, axis=0))
-            cond_color = np.repeat(color[np.newaxis, :], batch_size, axis=0)
-            t = [spm.encode_as_ids(t) for t in ["firma 1", "hallo", "was geht ab",  "kaltes bier", "vogel", "bird", "pelikan", "imperceptron", "albatros coding", "tree leaves", "nice coffee", "german engineering", "abcdef ghij", "klmnopq", "rstu vwxyz", "0123456789"]]
-            cond_txt   = vpack(t, (batch_size, max(map(len,t))), fill=1,  dtype="int64")
-            x_txt.extend(model.generate(x, cond_color, cond_txt))
+            if model.txt_cond_type:
+                _, x, _ = model.encode(np.repeat(img_emb[np.newaxis, :], batch_size, axis=0))
+                cond_color= None
+                if model.color_cond_type:
+                    cond_color = np.repeat(color[np.newaxis, :], batch_size, axis=0)
+                t = [spm.encode_as_ids(t) for t in ["firma 1", "hallo", "was geht ab",  "kaltes bier", "vogel", "bird", "pelikan", "imperceptron", "albatros coding", "tree leaves", "nice coffee", "german engineering", "abcdef ghij", "klmnopq", "rstu vwxyz", "0123456789"]]
+                cond_txt   = vpack(t, (batch_size, max(map(len,t))), fill=1,  dtype="int64")
+                x_txt.extend(decode_options(model,x, cond_color, cond_txt))
 
-            # color exploration
-            color_batchsize = 8
-            _, x, _ = model.encode(np.repeat(img_emb[np.newaxis, :],  color_batchsize, axis=0))
-            # blue, black, red, white/green, rainbow, türkis/red/white, black/gold/white
-            cond_color = np.array([[0.  , 0.  , 0.  , 0.  , 0.  , 0.58, 0.  , 0.  , 0.  , 0.  , 0.  ,
-                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.01,
-                                    0.01, 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
-                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.01, 0.  ,
-                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
-                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.39],
-                                   [0.93, 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
-                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.03,
-                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
-                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.03, 0.  ,
-                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
-                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ],
-                                   [0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
-                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.02, 0.  , 0.  , 0.  , 0.  ,
-                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
-                                    0.74, 0.  , 0.  , 0.  , 0.  , 0.01, 0.  , 0.  , 0.  , 0.  , 0.  ,
-                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
-                                    0.  , 0.  , 0.  , 0.01, 0.01, 0.  , 0.  , 0.  , 0.21],
-                                   [0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.05, 0.  ,
-                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
-                                    0.  , 0.  , 0.  , 0.09, 0.02, 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
-                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.03, 0.05, 0.  ,
-                                    0.  , 0.  , 0.02, 0.01, 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
-                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.73],
-                                   [0.  , 0.  , 0.  , 0.  , 0.  , 0.01, 0.02, 0.  , 0.  , 0.02, 0.  ,
-                                    0.04, 0.  , 0.  , 0.  , 0.  , 0.  , 0.03, 0.  , 0.  , 0.  , 0.  ,
-                                    0.02, 0.  , 0.01, 0.  , 0.03, 0.  , 0.  , 0.  , 0.  , 0.  , 0.02,
-                                    0.02, 0.04, 0.  , 0.01, 0.01, 0.01, 0.  , 0.  , 0.06, 0.01, 0.  ,
-                                    0.  , 0.  , 0.  , 0.  , 0.02, 0.  , 0.  , 0.  , 0.02, 0.01, 0.  ,
-                                    0.  , 0.04, 0.05, 0.01, 0.  , 0.  , 0.  , 0.01, 0.5 ],
-                                   [0.03, 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
-                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.01,
-                                    0.  , 0.  , 0.  , 0.  , 0.01, 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
-                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.02, 0.  ,
-                                    0.  , 0.  , 0.01, 0.38, 0.  , 0.  , 0.  , 0.  , 0.  , 0.05, 0.  ,
-                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.49],
-                                   [0.2 , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
-                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.16, 0.  , 0.  , 0.  , 0.02, 0.01,
-                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
-                                    0.  , 0.  , 0.  , 0.01, 0.04, 0.  , 0.  , 0.01, 0.12, 0.  , 0.  ,
-                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
-                                    0.  , 0.  , 0.19, 0.01, 0.  , 0.  , 0.01, 0.02, 0.21],
-                                   [0.  , 0.  , 0.  , 0.  , 0.  , 0.1 , 0.  , 0.  , 0.  , 0.  , 0.  ,
-                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
-                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
-                                    0.11, 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.16, 0.01, 0.  ,
-                                    0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
-                                    0.  , 0.  , 0.  , 0.01, 0.  , 0.  , 0.  , 0.  , 0.59],
-            ])
-            cond_txt = np.repeat(txt[np.newaxis, :],  color_batchsize , axis=0)
-            x_color.extend(model.generate(x, cond_color, cond_txt))
+            if model.color_cond_type:
+                # color exploration
+                if model.color_cond_type=="one_hot":
+                    cond_color = []
+                    for i in range(12):
+                        zeros = np.zeros(12)
+                        zeros[i]=1
+                        cond_color.append(zeros)
+                    cond_color = np.array(cond_color)
+                    color_batchsize = 12
+                elif model.color_cond_type=="continuous":
+                    color_batchsize=8
+                    # blue, black, red, white/green, rainbow, türkis/red/white, black/gold/white
+                    cond_color = np.array([[0.  , 0.  , 0.  , 0.  , 0.  , 0.58, 0.  , 0.  , 0.  , 0.  , 0.  ,
+                                            0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.01,
+                                            0.01, 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
+                                            0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.01, 0.  ,
+                                            0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
+                                            0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.39],
+                                           [0.93, 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
+                                            0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.03,
+                                            0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
+                                            0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.03, 0.  ,
+                                            0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
+                                            0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ],
+                                           [0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
+                                            0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.02, 0.  , 0.  , 0.  , 0.  ,
+                                            0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
+                                            0.74, 0.  , 0.  , 0.  , 0.  , 0.01, 0.  , 0.  , 0.  , 0.  , 0.  ,
+                                            0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
+                                            0.  , 0.  , 0.  , 0.01, 0.01, 0.  , 0.  , 0.  , 0.21],
+                                           [0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.05, 0.  ,
+                                            0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
+                                            0.  , 0.  , 0.  , 0.09, 0.02, 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
+                                            0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.03, 0.05, 0.  ,
+                                            0.  , 0.  , 0.02, 0.01, 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
+                                            0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.73],
+                                           [0.  , 0.  , 0.  , 0.  , 0.  , 0.01, 0.02, 0.  , 0.  , 0.02, 0.  ,
+                                            0.04, 0.  , 0.  , 0.  , 0.  , 0.  , 0.03, 0.  , 0.  , 0.  , 0.  ,
+                                            0.02, 0.  , 0.01, 0.  , 0.03, 0.  , 0.  , 0.  , 0.  , 0.  , 0.02,
+                                            0.02, 0.04, 0.  , 0.01, 0.01, 0.01, 0.  , 0.  , 0.06, 0.01, 0.  ,
+                                            0.  , 0.  , 0.  , 0.  , 0.02, 0.  , 0.  , 0.  , 0.02, 0.01, 0.  ,
+                                            0.  , 0.04, 0.05, 0.01, 0.  , 0.  , 0.  , 0.01, 0.5 ],
+                                           [0.03, 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
+                                            0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.01,
+                                            0.  , 0.  , 0.  , 0.  , 0.01, 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
+                                            0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.02, 0.  ,
+                                            0.  , 0.  , 0.01, 0.38, 0.  , 0.  , 0.  , 0.  , 0.  , 0.05, 0.  ,
+                                            0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.49],
+                                           [0.2 , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
+                                            0.  , 0.  , 0.  , 0.  , 0.  , 0.16, 0.  , 0.  , 0.  , 0.02, 0.01,
+                                            0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
+                                            0.  , 0.  , 0.  , 0.01, 0.04, 0.  , 0.  , 0.01, 0.12, 0.  , 0.  ,
+                                            0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
+                                            0.  , 0.  , 0.19, 0.01, 0.  , 0.  , 0.01, 0.02, 0.21],
+                                           [0.  , 0.  , 0.  , 0.  , 0.  , 0.1 , 0.  , 0.  , 0.  , 0.  , 0.  ,
+                                            0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
+                                            0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
+                                            0.11, 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.16, 0.01, 0.  ,
+                                            0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
+                                            0.  , 0.  , 0.  , 0.01, 0.  , 0.  , 0.  , 0.  , 0.59],])
+
+                _, x, _ = model.encode(np.repeat(img_emb[np.newaxis, :],  color_batchsize, axis=0))
+                cond_txt = None
+                if model.txt_cond_type:
+                    cond_txt = np.repeat(txt[np.newaxis, :],  color_batchsize , axis=0)
+                x_color.extend(decode_options(model,x, cond_color, cond_txt))
 
         with writer.as_default():
             tf.summary.image( "change_x",
@@ -110,12 +141,14 @@ def run_tests(model, writer, img_embs, colors, txts, spm, btlnk, img_dim, batch_
             tf.summary.image( "latent_walk",
                               spread_image(zs_gen,1*len(colors),batch_size,img_dim[0],img_dim[1]),
                               step=step)
-            tf.summary.image( "change_text",
-                              spread_image(x_txt,1*len(colors),batch_size,img_dim[0],img_dim[1]),
-                              step=step)
-            tf.summary.image( "change_color",
-                              spread_image(x_color,1*len(colors),color_batchsize, img_dim[0],img_dim[1]),
-                              step=step)
+            if model.txt_cond_type:
+                tf.summary.image( "change_text",
+                                  spread_image(x_txt,1*len(colors),batch_size,img_dim[0],img_dim[1]),
+                                  step=step)
+            if model.color_cond_type:
+                tf.summary.image( "change_color",
+                                  spread_image(x_color,1*len(colors),color_batchsize, img_dim[0],img_dim[1]),
+                                  step=step)
             writer.flush()
 
 

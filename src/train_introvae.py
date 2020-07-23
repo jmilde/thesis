@@ -67,16 +67,16 @@ def main():
 
 
     if p["vae_epochs"] and p["epochs"]:
-        modeltype = f"INTRO{p['epochs']}_pre{p['vae_epochs']}-m{m_plus}-lr{lr_enc}b{beta1}-w_rec{weight_rec}-w_neg{weight_neg}"
+        modeltype = f"INTRO{p['epochs']}_pre{p['vae_epochs']}-m{m_plus}-b{beta1}-w_rec{weight_rec}-w_neg{weight_neg}"
     elif p["epochs"]:
         modeltype = f"INTRO{p['epochs']}-m{m_plus}-lr{lr_enc}b{beta1}-w_rec{weight_rec}-w_neg{weight_neg}-w_neg{weight_neg}"
     else:
         modeltype = f"VAE{p['vae_epochs']}"
     txt_info   = f"txt:({txt_cond_type}-dense{cond_dim_txts}-rnn{rnn_dim}-emb{emb_dim})"  if color_cond_type else ""
     color_info = f"color:({color_cond_type}{cond_dim_color})" if color_cond_type else ""
-    model_name = (f"{modeltype}"
-                  f"{color_info}"
-                  f"{txt_info}"
+    model_name = (f"{modeltype}-lr{lr_enc}-z{btlnk}"
+                  f"{color_info}-"
+                  f"{txt_info}-"
                   f"{','.join(str(x) for x in img_dim)}")
 
     logfrq = ds_size//logs_per_epoch//batch_size

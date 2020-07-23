@@ -79,8 +79,8 @@ params = {
         "weight_kl": 1,
         "weight_neg": 0.25, #og:0.25, alpha 0.1-0.5
         "m_plus": 110, #og:110, #250 should be selected according to the value of β, to balance advaserial loss
-        "lr_enc":0.0002,
-        "lr_dec":0.0002,
+        "lr_enc": 0.0002, #0.0002,
+        "lr_dec": 0.0002, #0.0002,
         "beta1": 0.9},
 
 }

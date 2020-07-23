@@ -117,11 +117,17 @@ def get_colors_old(img):
     hist = find_histogram(clt)
     output = np.zeros(11)
     try:
-        hist, cluster_centers = zip(*sorted(zip(hist, clt.cluster_centers_)))
+        order = sorted(range(len(hist)), key=hist.__getitem__)
+        hist = [hist[i] for i in order]
+        cluster_centers = [clt.cluster_centers_[i] for i in order]
 
         color = get_shade(get_colour_name(cluster_centers[-1]))
-        if color =="white":
+        if color =="white" or color=="unknown":
             color = get_shade(get_colour_name(cluster_centers[-2]))
+        if color =="white" or color=="unknown":
+            color = get_shade(get_colour_name(cluster_centers[-3]))
+        if color =="white" or color=="unknown":
+            return ""
         output[color2nr[color]]=1
         return output
     except:
@@ -264,7 +270,6 @@ def main(path_data, path_data_lld, path_data_metu, path_lbls_metu, resize_size, 
     np.savez_compressed(os.path.join(path_out, f"eudata_prep_pt{batch_nr}.npz"),
                         imgs=imgs, colors=colors, txts=txts, colors_old=np.array(colors_old))
     batch_nr += 1
-
 
 
     print("final step: saving images")

@@ -18,7 +18,7 @@ import webcolors
 #[f"rgb({b},{a},{c})" for a,b,c  in x]
 color2nr = {'green':0,
             'purple':1,
-            'white':2,
+            'black':2,
             'brown':3,
             'blue':4,
             'cyan':5,
@@ -27,7 +27,7 @@ color2nr = {'green':0,
             'red':8,
             'pink':9,
             'orange':10,
-            'black':11}
+            }
 
 def get_shade(color_name):
 
@@ -115,15 +115,17 @@ def get_colors_old(img):
     clt = MiniBatchKMeans(n_clusters=3)
     clt.fit(img)
     hist = find_histogram(clt)
-    output = np.zeros(12)
-    hist, cluster_centers = zip(*sorted(zip(hist, clt.cluster_centers_)))
-    color = get_shade(get_colour_name(cluster_centers[-1]))
-    print("color1:", color)
-    if color =="white":
-        color = get_shade(get_colour_name(cluster_centers[-2]))
-        print("color2:", color)
-    output[color2nr[color]]=1
-    return output
+    output = np.zeros(11)
+    try:
+        hist, cluster_centers = zip(*sorted(zip(hist, clt.cluster_centers_)))
+
+        color = get_shade(get_colour_name(cluster_centers[-1]))
+        if color =="white":
+            color = get_shade(get_colour_name(cluster_centers[-2]))
+        output[color2nr[color]]=1
+        return output
+    except:
+        return ""
 
 
 def get_description(description, language_code="en"):
@@ -177,14 +179,20 @@ def main(path_data, path_data_lld, path_data_metu, path_lbls_metu, resize_size, 
         with concurrent.futures.ProcessPoolExecutor() as executor:
             data = list(tqdm(executor.map(prep, paths_, resize), total=len(paths_)))
         data = [d for d in data if d]
-        print("getting images")
-        imgs = np.array([d[0] for d in data], dtype="uint8")
         print("get colors old")
-        colors_old = [get_colors_old(img) for img in imgs]
-        print("getting texts")
-        txts = [d[1] for d in data]
-        print("getting colors")
-        colors = np.array([d[2] for d in data], dtype="float32")
+        colors_old, to_delete = [], []
+        for i,d in enumerate(data):
+            c = get_colors_old(d[0])
+            if type(c)!=list:
+                colors_old.append(c)
+            else:
+                to_delete.append(i)
+        print("getting images of EUDATA")
+        imgs = np.array([d[0] for i,d in enumerate(data) if i not in to_delete], dtype="uint8")
+        print("getting texts of EUDATA")
+        txts = [d[1] for i,d in enumerate(data) if i not in to_delete]
+        print("getting colors of EUDATA")
+        colors = np.array([d[2] for i,d in enumerate(data) if i not in to_delete], dtype="float32")
         print(f"saving to part to {path_out}eudata_prep{batch_nr}.npz")
         np.savez_compressed(os.path.join(path_out, f"eudata_prep_pt{batch_nr}.npz"),
                             imgs=imgs, colors=colors, txts=txts, colors_old=colors_old )
@@ -206,14 +214,20 @@ def main(path_data, path_data_lld, path_data_metu, path_lbls_metu, resize_size, 
                 print(x.shape)
         except:
             print(i,d)
-    print("getting images of LLD")
-    imgs = np.array([d[0] for d in data], dtype="uint8")
     print("get colors old")
-    colors_old = [get_colors_old(img) for img in imgs]
+    colors_old, to_delete = [], []
+    for i,d in enumerate(data):
+        c = get_colors_old(d[0])
+        if type(c)!=list:
+            colors_old.append(c)
+        else:
+            to_delete.append(i)
+    print("getting images of LLD")
+    imgs = np.array([d[0] for i,d in enumerate(data) if i not in to_delete], dtype="uint8")
     print("getting texts of LLD")
-    txts = [d[1] for d in data]
+    txts = [d[1] for i,d in enumerate(data) if i not in to_delete]
     print("getting colors of LLD")
-    colors = np.array([d[2] for d in data], dtype="float32")
+    colors = np.array([d[2] for i,d in enumerate(data) if i not in to_delete], dtype="float32")
     print(f"saving to part to {path_out}eudata_prep{batch_nr}.npz")
     np.savez_compressed(os.path.join(path_out, f"eudata_prep_pt{batch_nr}.npz"),
                         imgs=imgs, colors=colors, txts=txts, colors_old=colors_old)
@@ -232,14 +246,20 @@ def main(path_data, path_data_lld, path_data_metu, path_lbls_metu, resize_size, 
     with concurrent.futures.ProcessPoolExecutor() as executor:
         data = list(tqdm(executor.map(prep_2, paths, resize_size_), total=len(paths)))
     data = [d for d in data if d]
-    print("getting images for metu")
-    imgs = np.array([d[0] for d in data], dtype="uint8")
     print("get colors old")
-    colors_old = [get_colors_old(img) for img in imgs]
-    print("getting texts for metu")
-    txts = [d[1] for d in data]
-    print("getting colors for metu")
-    colors = np.array([d[2] for d in data], dtype="float32")
+    colors_old, to_delete = [], []
+    for i,d in enumerate(data):
+        c = get_colors_old(d[0])
+        if type(c)!=list:
+            colors_old.append(c)
+        else:
+            to_delete.append(i)
+    print("getting images of LLD")
+    imgs = np.array([d[0] for i,d in enumerate(data) if i not in to_delete], dtype="uint8")
+    print("getting texts of LLD")
+    txts = [d[1] for i,d in enumerate(data) if i not in to_delete]
+    print("getting colors of LLD")
+    colors = np.array([d[2] for i,d in enumerate(data) if i not in to_delete], dtype="float32")
     print(f"saving to part to {path_out}eudata_prep{batch_nr}.npz")
     np.savez_compressed(os.path.join(path_out, f"eudata_prep_pt{batch_nr}.npz"),
                         imgs=imgs, colors=colors, txts=txts, colors_old=colors_old)

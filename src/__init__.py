@@ -74,12 +74,12 @@ def generate_random():
     ### random image embedding
     img_embs = np.random.normal(0,1,(9,params["for_flask"]["btlnk"]))
 
-    imgs = app.generator.generate(img_embs, color_cond, txt_cond)
-    sigmoid = lambda x: 1/(1 + np.exp(-x))
+    imgs = app.generator.decode(img_embs)#, color_cond, txt_cond)
     time = datetime.datetime.now().strftime("%Y%m%d%H%M%S%f")
 
     for i, (emb, img) in enumerate(zip(img_embs, imgs),1):
-        imsave(f"./src/static/imgtmp{i}.jpg", (sigmoid(img)*255).astype("uint8"))
+        print(img)
+        imsave(f"./src/static/imgtmp{i}.jpg", np.clip(img*255, a_max=255, a_min=0).astype("uint8"))
         np.save(f"./src/static/embtmp{i}.npy", emb)
 
     return jsonify({
@@ -108,19 +108,18 @@ def generate_similar():
     color_cond = np.array(prep_colors(data))
     color_cond = np.repeat(color_cond[np.newaxis, :], 9, axis=0)
 
-    img_embs= np.repeat(og_img[np.newaxis, :], 9, axis=0) +np.random.normal(0, scale=0.1, size=(9,params["for_flask"]["btlnk"]))
-    img_embs[img_embs<0]=0
-    img_embs[img_embs>1]=1
+    img_embs= np.repeat(og_img[np.newaxis, :], 9, axis=0) +np.random.normal(0, scale=0.3, size=(9,params["for_flask"]["btlnk"]))
+    #img_embs[img_embs<0]=0
+    #img_embs[img_embs>1]=1
     #img_embs[img_nr]=og_img # keep the image we clicked on the same
 
 
-    imgs = app.generator.generate(img_embs, color_cond, txt_cond)
-    sigmoid = lambda x: 1/(1 + np.exp(-x))
+    imgs = app.generator.decode(img_embs)#, color_cond, txt_cond)
     time = datetime.datetime.now().strftime("%Y%m%d%H%M%S%f")
 
     for i, (emb, img) in enumerate(zip(img_embs, imgs),1):
         if i != img_nr:
-            imsave(f"./src/static/imgtmp{i}.jpg", (sigmoid(img)*255).astype("uint8"))
+            imsave(f"./src/static/imgtmp{i}.jpg", np.clip(img*255, a_max=255, a_min=0).astype("uint8"))
             np.save(f"./src/static/embtmp{i}.npy", emb)
 
     return jsonify({

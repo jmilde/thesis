@@ -202,6 +202,9 @@ def load_model():
                   f"{txt_info}-"
                   f"{','.join(str(x) for x in img_dim)}")
 
+
+    model_name="VAE20-lr0.0002-z256--128,128,3"
+
     logfrq = ds_size//logs_per_epoch//batch_size
     path_ckpt  = path_ckpt+model_name
 

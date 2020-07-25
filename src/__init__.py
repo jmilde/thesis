@@ -72,7 +72,7 @@ def generate_random():
     color_cond = np.array(prep_colors(data))
     color_cond = np.repeat(color_cond[np.newaxis, :], 9, axis=0)
     ### random image embedding
-    img_embs = np.random.rand(9,params["for_flask"]["btlnk"])
+    img_embs = np.random.normal(0,1,(9,params["for_flask"]["btlnk"]))
 
     imgs = app.generator.generate(img_embs, color_cond, txt_cond)
     sigmoid = lambda x: 1/(1 + np.exp(-x))

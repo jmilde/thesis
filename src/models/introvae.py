@@ -16,6 +16,7 @@ class INTROVAE(tf.keras.Model):
                  lr_enc                   = 0.0002,
                  lr_dec                   = 0.0002,
                  beta1                    = 0.5,
+                 beta2                    = 0.999,
                  noise_color              = 0.1,
                  noise_txt                = 0.1,
                  noise_img                = 0.1,
@@ -53,8 +54,8 @@ class INTROVAE(tf.keras.Model):
 
         self.relu = tf.keras.layers.ReLU()
         # optimizers
-        self.optimizer_enc= tf.keras.optimizers.Adam(lr_enc, beta_1=beta1)
-        self.optimizer_dec= tf.keras.optimizers.Adam(lr_dec, beta_1=beta1)
+        self.optimizer_enc= tf.keras.optimizers.Adam(lr_enc, beta_1=beta1, beta_2=beta2)
+        self.optimizer_dec= tf.keras.optimizers.Adam(lr_dec, beta_1=beta1, beta_2=beta2)
 
     def encode(self, x, training=False):
         z, mu, lv = self.encoder(x, training=training)

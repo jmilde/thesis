@@ -19,15 +19,6 @@ def show_img(img, channel_first=False):
     plt.imshow(img)
     plt.show()
 
-def decode_options(model, x, cond_color=None, cond_txt=None):
-    if model.txt_cond_type and model.color_cond_type:
-        return model.decode(x, cond_color, cond_txt)
-    elif model.color_cond_type:
-        return model.decode(x, color=cond_color)
-    elif model.txt_cond_type:
-        return model.decode(x, txt=cond_txt)
-    else:
-        return model.decode(x)
 
 def move_through_latent(z_a, z_b, nr_steps):
     z_a, z_b = np.asarray(z_a), np.array(z_b)
@@ -42,19 +33,19 @@ def run_tests(model, writer, img_embs, colors, txts, spm, btlnk, img_dim,
         for img_emb, color, txt in zip(img_embs, colors, txts):
 
             # from random noise with color and txt from real examples
-            x    = np.random.rand(batch_size, btlnk)
+            x    = np.random.normal(0,1,(batch_size, btlnk))
             cond_color = None
             if model.color_cond_type:
                 cond_color = np.repeat(color[np.newaxis, :], batch_size, axis=0)
             cond_txt = None
             if model.txt_cond_type:
                 cond_txt = np.repeat(txt[np.newaxis, :], batch_size, axis=0)
-            x_gen.extend(decode_options(model,x, cond_color, cond_txt))
+            x_gen.extend(model.decode(x, cond_color, cond_txt))
 
             # latent space walk from real image to random point
             _, mu, _ = model.encode(img_emb[np.newaxis, :])
             zs = move_through_latent(mu[0], x[0], batch_size)
-            zs_gen.extend(decode_options(model, zs, cond_color, cond_txt))
+            zs_gen.extend(model.decode( zs, cond_color, cond_txt))
 
             # text exploration
             if model.txt_cond_type:
@@ -64,7 +55,7 @@ def run_tests(model, writer, img_embs, colors, txts, spm, btlnk, img_dim,
                     cond_color = np.repeat(color[np.newaxis, :], batch_size, axis=0)
                 t = [spm.encode_as_ids(t) for t in ["firma 1", "hallo", "was geht ab",  "kaltes bier", "vogel", "bird", "pelikan", "imperceptron", "albatros coding", "tree leaves", "nice coffee", "german engineering", "abcdef ghij", "klmnopq", "rstu vwxyz", "0123456789"]]
                 cond_txt   = vpack(t, (batch_size, max(map(len,t))), fill=1,  dtype="int64")
-                x_txt.extend(decode_options(model,x, cond_color, cond_txt))
+                x_txt.extend(model.decode(x, cond_color, cond_txt))
 
             if model.color_cond_type:
                 # color exploration
@@ -132,7 +123,7 @@ def run_tests(model, writer, img_embs, colors, txts, spm, btlnk, img_dim,
                 cond_txt = None
                 if model.txt_cond_type:
                     cond_txt = np.repeat(txt[np.newaxis, :],  color_batchsize , axis=0)
-                x_color.extend(decode_options(model,x, cond_color, cond_txt))
+                x_color.extend(model.decode(x, cond_color, cond_txt))
 
         with writer.as_default():
             tf.summary.image( "change_x",
@@ -158,7 +149,8 @@ def load_model():
         tf.config.experimental.set_visible_devices(gpus[0], 'GPU')
         tf.config.experimental.set_memory_growth(gpus[0], True)
 
-    p = params["for_flask"]
+    p = params["train"]
+
     path_ckpt = p['path_ckpt']
     path_cond = p['path_cond']
     path_data = p['path_data']
@@ -187,13 +179,28 @@ def load_model():
     lr_enc = p['lr_enc']
     lr_dec = p['lr_dec']
     beta1 = p['beta1']
+    beta2 = p['beta2']
     noise_color = p['noise_color']
     noise_txt = p['noise_txt']
     noise_img = p['noise_img']
-
     ds_size = len(np.load(path_cond, allow_pickle=True)["colors"])
-    cond_dim = len(np.load(path_cond, allow_pickle=True)["colors"][1])
-    model_name = f"VAE_RNNcolor{cond_dim_color}txts{cond_dim_txts}-pre{vae_epochs}-{','.join(str(x) for x in img_dim)}-m{m_plus}-lr{lr_enc}b{beta1}-w_rec{weight_rec}-rnn{rnn_dim}-emb{emb_dim}"
+    color_cond_type = p['color_cond_type']
+    txt_cond_type = p['txt_cond_type']
+    color_cond_dim = len(np.load(path_cond, allow_pickle=True)["colors_old" if color_cond_type=="one_hot" else "colors"][1])
+
+
+    if p["vae_epochs"] and p["epochs"]:
+        modeltype = f"INTRO{p['epochs']}_pre{p['vae_epochs']}-m{m_plus}-b1{beta1}b2{beta2}-w_rec{weight_rec}-w_neg{weight_neg}"
+    elif p["epochs"]:
+        modeltype = f"INTRO{p['epochs']}-m{m_plus}-lr{lr_enc}b1{beta1}b2{beta2}-w_rec{weight_rec}-w_neg{weight_neg}-w_neg{weight_neg}"
+    else:
+        modeltype = f"VAE{p['vae_epochs']}-b1{beta1}b2{beta2}"
+    txt_info   = f"txt:({txt_cond_type}-dense{cond_dim_txts}-rnn{rnn_dim}-emb{emb_dim})"  if color_cond_type else ""
+    color_info = f"color:({color_cond_type}{cond_dim_color})" if color_cond_type else ""
+    model_name = (f"{modeltype}-lr{lr_enc}-z{btlnk}"
+                  f"{color_info}-"
+                  f"{txt_info}-"
+                  f"{','.join(str(x) for x in img_dim)}")
 
     logfrq = ds_size//logs_per_epoch//batch_size
     path_ckpt  = path_ckpt+model_name
@@ -202,12 +209,12 @@ def load_model():
     spm = load_spm(path_spm + ".model")
     spm.SetEncodeExtraOptions("bos:eos") # enable start(=2)/end(=1) symbols
     vocab_dim = spm.vocab_size()
-
     #pipeline
-    #bg = batch_resize(path_data, batch_size, RESIZE_SIZE)
+    #bg = batch_resize(path_data, batch_size, img_dim)
     #data = pipe(lambda: bg, (tf.float32), prefetch=6)
-    bg = batch_cond_spm(path_data, path_cond, spm, batch_size)
+    bg = batch_cond_spm(path_data, path_cond, spm, batch_size, color_cond_type)
     data = pipe(lambda: bg, (tf.float32, tf.float32, tf.int64), (tf.TensorShape([None, None, None, None]), tf.TensorShape([None, None]), tf.TensorShape([None, None])), prefetch=6)
+
 
     # model
     model = INTROVAE(img_dim,
@@ -219,6 +226,11 @@ def load_model():
                      cond_dim_txts,
                      vocab_dim,
                      emb_dim,
+                     color_cond_dim,
+                     color_cond_type,
+                     txt_cond_type,
+                     dropout_conditionals=dropout_conditionals,
+                     dropout_encoder_resblock=dropout_encoder_resblock,
                      normalizer_enc = tf.keras.layers.BatchNormalization,
                      normalizer_dec = tf.keras.layers.BatchNormalization,
                      weight_rec=weight_rec,
@@ -228,6 +240,7 @@ def load_model():
                      lr_enc= lr_enc,
                      lr_dec= lr_dec,
                      beta1 = beta1,
+                     beta2 = beta2,
                      noise_color =noise_color,
                      noise_txt =noise_txt,
                      noise_img =noise_img,)

@@ -12,7 +12,7 @@ import xmltodict
 import pandas as pd
 from sklearn.cluster import MiniBatchKMeans
 import webcolors
-
+from os.path import expanduser
 ### value to position
 #x=[[a,b,c] for a in range(0,256,85) for b in range(0,256,85) for c in range(0,256,85)]
 #[f"rgb({b},{a},{c})" for a,b,c  in x]
@@ -30,7 +30,6 @@ color2nr = {'green':0,
             }
 
 def get_shade(color_name):
-
     if color_name == 'darkolivegreen' or color_name == 'olive' or color_name == 'olivedrab' or color_name == 'yellowgreen' or color_name == 'limegreen' or color_name == 'lime' or color_name == 'lawngreen' or color_name == 'chartreuse' or color_name == 'greenyellow' or color_name == 'springgreen' or  color_name == 'mediumspringgreen' or color_name == 'lightgreen' or color_name == 'palegreen' or color_name == 'darkseagreen' or color_name == 'mediumaquamarine' or  color_name == 'mediumseagreen' or color_name == 'seagreen' or color_name == 'forestgreen' or color_name == 'green' or color_name == 'darkgreen':
         shade =  'green'
     elif color_name == 'lavender' or color_name == 'thistle' or color_name == 'plum' or color_name == 'violet' or color_name == 'orchid' or color_name == 'fuchsia' or color_name == 'magenta' or color_name == 'mediumorchid' or color_name == 'mediumpurple' or color_name == 'blueviolet' or  color_name == 'darkviolet' or color_name == 'darkorchid' or color_name == 'darkmagenta' or color_name == 'purple' or color_name == 'indigo' or  color_name == 'darkslateblue' or color_name == 'slateblue' or color_name == 'mediumslateblue':
@@ -59,8 +58,8 @@ def get_shade(color_name):
         shade = 'black'
     else:
         shade = 'unknown'
-
     return shade
+
 
 def closest_colour(requested_colour):
     min_colours = {}
@@ -72,6 +71,7 @@ def closest_colour(requested_colour):
         min_colours[(rd + gd + bd)] = name
     return min_colours[min(min_colours.keys())]
 
+
 def unison_shfl(l1, l2, SEED=25):
     l1_shfl, l2_shfl = [], []
     shfl_idx = np.arange(len(l1))
@@ -81,6 +81,7 @@ def unison_shfl(l1, l2, SEED=25):
         l1_shfl.append(l1[i])
         l2_shfl.append(l2[i])
     return l1_shfl, l2_shfl
+
 
 def get_colour_name(requested_colour):
     try:
@@ -111,26 +112,33 @@ def get_colors_old(img):
      [119.30412371, 124.46563574, 124.33161512]]),
     array([0.31567383, 0.29217529, 0.39215088]))
 """
-    img = img.reshape((img.shape[0] * img.shape[1],3))
-    clt = MiniBatchKMeans(n_clusters=3)
-    clt.fit(img)
-    hist = find_histogram(clt)
-    output = np.zeros(11)
     try:
-        order = sorted(range(len(hist)), key=hist.__getitem__)
-        hist = [hist[i] for i in order]
-        cluster_centers = [clt.cluster_centers_[i] for i in order]
+        img = img.reshape((img.shape[0] * img.shape[1],3))
+        clt = MiniBatchKMeans(n_clusters=3)
+        clt.fit(img)
+        histogram = find_histogram(clt)
+        order = sorted(range(len(histogram)), key=histogram.__getitem__)
+        hist, cluster_centers = [],[]
+        for i in order:
+            hist.append(histogram[i])
+            cluster_centers.append(clt.cluster_centers_[i])
 
         color = get_shade(get_colour_name(cluster_centers[-1]))
-        if color =="white" or color=="unknown":
+        if (color =="white" or color=="unknown") and len(cluster_centers)>1:
             color = get_shade(get_colour_name(cluster_centers[-2]))
-        if color =="white" or color=="unknown":
+        if (color =="white" or color=="unknown") and len(cluster_centers)>2:
             color = get_shade(get_colour_name(cluster_centers[-3]))
         if color =="white" or color=="unknown":
             return ""
+        output = np.zeros(11)
         output[color2nr[color]]=1
         return output
-    except:
+    except Exception as e:
+        print(e)
+        print(img.shape)
+        print(histogram)
+        print(clt.cluster_centers_)
+        print(color)
         return ""
 
 
@@ -181,7 +189,7 @@ def main(path_data, path_data_lld, path_data_metu, path_lbls_metu, resize_size, 
 
     print("processing the data")
     batch_nr = 0
-    for paths_, resize in zip(np.split(paths, batch_size), np.split(resize_size_, batch_size)):
+    for paths_, resize in zip(np.array_split(paths, batch_size), np.array_split(resize_size_, batch_size)):
         with concurrent.futures.ProcessPoolExecutor() as executor:
             data = list(tqdm(executor.map(prep, paths_, resize), total=len(paths_)))
         data = [d for d in data if d]
@@ -200,10 +208,9 @@ def main(path_data, path_data_lld, path_data_metu, path_lbls_metu, resize_size, 
         print("getting colors of EUDATA")
         colors = np.array([d[2] for i,d in enumerate(data) if i not in to_delete], dtype="float32")
         print(f"saving to part to {path_out}eudata_prep{batch_nr}.npz")
-        np.savez_compressed(os.path.join(path_out, f"eudata_prep_pt{batch_nr}.npz"),
-                            imgs=imgs, colors=colors, txts=txts, colors_old=np.array(colors_old) )
+        #np.savez_compressed(os.path.join(path_out, f"eudata_prep_pt{batch_nr}.npz"),
+        #                    imgs=imgs, colors=colors, txts=txts, colors_old=np.array(colors_old) )
         batch_nr += 1
-
     ##############################
     # LARGE LOGO DATASET LOGANv2 #
     ##############################
@@ -348,7 +355,6 @@ def prep(path, resize_size):
                 if img_path:
                     img = io.imread(os.path.join(path_data, img_path.split("//")[1]))
                     shape = img.shape
-
                     if ((len(shape)==3) and (shape[-1]>3))or((shape[0]<resize_size[0]) and (shape[1]<resize_size[0])): # skip over faulty images
                         return None
 
@@ -378,11 +384,11 @@ def prep(path, resize_size):
             return None
 
 if __name__=="__main__":
-    path_data      = "../eudata_unpacked/"
-    path_data_lld  = "../LOGOS_REFORMAT/"
-    path_data_metu = "../930k_logo_v3"
-    path_lbls_metu = "../METU_logo_type_info.csv"
-    path_out       = "../"
+    path_data      = expanduser("../eudata_unpacked/")
+    path_data_lld  = expanduser("../LOGOS_REFORMAT/")
+    path_data_metu = expanduser("../930k_logo_v3")
+    path_lbls_metu = expanduser("../METU_logo_type_info.csv")
+    path_out       = expanduser("../")
     batch_size     = 3 # batch size 2 needs ~ 135gb RAM
     resize_size    = (128,128,3)
 

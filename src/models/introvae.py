@@ -75,7 +75,7 @@ class INTROVAE(tf.keras.Model):
         return tf.reduce_mean(-0.5 * tf.reduce_sum((-1*(tf.square(-mu)+tf.exp(lv))+1+lv),-1))+0.0
 
     def mse_loss(self, x, x_rec, size_average=True):
-        x = tf.reduce_sum(tf.math.square(tf.reshape(x-x_rec,(x.shape[0],-1))), -1)
+        x = tf.reduce_sum(tf.math.square(tf.reshape(x_rec-x,(x.shape[0],-1))), -1)
         if size_average:
             return tf.reduce_mean(x)+0.0
         else:
@@ -111,10 +111,7 @@ class INTROVAE(tf.keras.Model):
                 "loss": loss,
                 "loss_kl": loss_kl,
                 "loss_rec": loss_rec}
-    # maybe with tf 2.2 this works
-    #input_signature=[tf.TensorSpec(shape=(None,None,None,None), dtype=tf.float32),
-                                  #tf.TensorSpec(shape=(None,None), dtype=tf.float32),
-                                  #tf.TensorSpec(shape=(None,None), dtype=tf.int64)])
+
     @tf.function(experimental_relax_shapes=True)
     def train_vae(self, x, colors, txts):
         with tf.GradientTape() as tape:
@@ -144,7 +141,7 @@ class INTROVAE(tf.keras.Model):
         x_p       = self.decode(z_p, x_color, x_txt, training=training) # generate fake from z_p
 
         # reconstruction loss
-        loss_rec =  self.mse_loss(x, x_r)
+        loss_rec =  self.mse_loss(x, x_r)* self.weight_rec
 
 
 
@@ -156,11 +153,11 @@ class INTROVAE(tf.keras.Model):
         kl_real  = self.kl_loss(mu, lv)
         kl_rec_  = self.kl_loss(mu_r_, lv_r_)
         kl_fake_ = self.kl_loss(mu_p_, lv_p_)
-        loss_enc_adv = kl_real + 0.5*(self.relu(self.m_plus - kl_rec_) + self.relu(self.m_plus-kl_fake_) ) *self.weight_neg
+        loss_enc_adv =(kl_real + 0.5*(self.relu(self.m_plus - kl_rec_) + self.relu(self.m_plus-kl_fake_))*self.weight_neg)* self.weight_kl
 
 
         ### ENCODER LOSS
-        loss_enc = loss_rec * self.weight_rec + loss_enc_adv * self.weight_kl
+        loss_enc = loss_rec + loss_enc_adv
 
 
         # gradient flow for decoder
@@ -170,8 +167,8 @@ class INTROVAE(tf.keras.Model):
         ### DECODER
         kl_rec  = self.kl_loss(mu_r, lv_r)
         kl_fake = self.kl_loss(mu_p, lv_p)
-        loss_dec_adv = 0.5*(kl_rec + kl_fake)
-        loss_dec = loss_dec_adv * self.weight_kl + loss_rec * self.weight_rec
+        loss_dec_adv = 0.5*(kl_rec + kl_fake) * self.weight_kl
+        loss_dec = loss_dec_adv + loss_rec
 
 
 
@@ -219,7 +216,7 @@ class Encoder(tf.keras.layers.Layer):
                                          padding="same",
                                          use_bias=False),
                        normalizer(),
-                       tf.keras.layers.ReLU(),
+                       tf.keras.layers.LeakyReLU(0.2),
                        tf.keras.layers.AveragePooling2D()]
 
         for i, channel in enumerate(channels[1:], 1):
@@ -299,9 +296,8 @@ class Decoder(tf.keras.layers.Layer):
         # additional res layer
         self.layers.append(ResBlock(channels[-1]))
 
-        self.layers.append(tf.keras.layers.Conv2D(inpt_dim[-1], kernel_size=5, strides=1,
-                                                      use_bias = False,
-                                                      padding="same"))
+        self.layers.append(tf.keras.layers.Conv2D(inpt_dim[-1], kernel_size=5,
+                                                  strides=1, padding="same"))
 
     def call(self, z, color=None, txt=None, training=False):
         #if self.color_cond_type=="one_hot":

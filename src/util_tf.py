@@ -33,7 +33,7 @@ def batch_cond_spm(path_imgs, path_cond, spm, batch_size, cond_type="old", seed=
             yield np.array(i, dtype="float32"), np.array(c, dtype="float32"), vpack(t, (batch_size, max(map(len,t))), fill=1,  dtype="int64")
             i, c, t = [], [], []
 
-        i.append(io.imread(os.path.join(path_imgs, f"{j}.png"))/255)
+        i.append(io.imread(os.path.join(path_imgs, f"{j}.png")))
         c.append(colors[j])
         t.append(spm.encode_as_ids(txts[j]))
 

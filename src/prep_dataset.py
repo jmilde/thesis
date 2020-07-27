@@ -124,15 +124,16 @@ def get_colors_old(img):
             cluster_centers.append(clt.cluster_centers_[i])
 
         color = get_shade(get_colour_name(cluster_centers[-1]))
-        if (color =="white" or color=="unknown") and len(cluster_centers)>1:
+        if (color =="white" or color=="unknown") and len(order)>1:
             color = get_shade(get_colour_name(cluster_centers[-2]))
-        if (color =="white" or color=="unknown") and len(cluster_centers)>2:
+        if (color =="white" or color=="unknown") and len(order)>2:
             color = get_shade(get_colour_name(cluster_centers[-3]))
-        if color =="white" or color=="unknown":
-            return ""
-        output = np.zeros(11)
-        output[color2nr[color]]=1
-        return output
+        if color !="white" and color!="unknown":
+            output = np.zeros(11)
+            output[color2nr[color]]=1
+            return output
+        return ""
+
     except Exception as e:
         print(e)
         print(img.shape)
@@ -193,23 +194,18 @@ def main(path_data, path_data_lld, path_data_metu, path_lbls_metu, resize_size, 
         with concurrent.futures.ProcessPoolExecutor() as executor:
             data = list(tqdm(executor.map(prep, paths_, resize), total=len(paths_)))
         data = [d for d in data if d]
-        print("get colors old")
-        colors_old, to_delete = [], []
-        for i,d in enumerate(data):
-            c = get_colors_old(d[0])
-            if type(c)!=list:
-                colors_old.append(c)
-            else:
-                to_delete.append(i)
+
         print("getting images of EUDATA")
-        imgs = np.array([d[0] for i,d in enumerate(data) if i not in to_delete], dtype="uint8")
+        imgs = np.array([d[0] for i,d in enumerate(data)], dtype="uint8")
         print("getting texts of EUDATA")
-        txts = [d[1] for i,d in enumerate(data) if i not in to_delete]
+        txts = [d[1] for i,d in enumerate(data)]
         print("getting colors of EUDATA")
-        colors = np.array([d[2] for i,d in enumerate(data) if i not in to_delete], dtype="float32")
+        colors = np.array([d[2] for i,d in enumerate(data)], dtype="float32")
+        print("getting OH-colors of EUDATA")
+        colors_old = np.array([d[3] for i,d in enumerate(data)], dtype="float32")
         print(f"saving to part to {path_out}eudata_prep_pt{batch_nr}.npz")
         np.savez_compressed(os.path.join(path_out, f"eudata_prep_pt{batch_nr}.npz"),
-                            imgs=imgs, colors=colors, txts=txts, colors_old=np.array(colors_old) )
+                            imgs=imgs, colors=colors, txts=txts, colors_old=colors_old)
         batch_nr += 1
     ##############################
     # LARGE LOGO DATASET LOGANv2 #
@@ -220,30 +216,17 @@ def main(path_data, path_data_lld, path_data_metu, path_lbls_metu, resize_size, 
     with concurrent.futures.ProcessPoolExecutor() as executor:
         data = list(tqdm(executor.map(prep_2, paths, resize_size_), total=len(paths)))
     data = [d for d in data if d]
-    for i,d in enumerate(data):
-        try:
-            x= d[0]
-            if x.shape!=(128,128,3):
-                print(x.shape)
-        except:
-            print(i,d)
-    print("get colors old")
-    colors_old, to_delete = [], []
-    for i,d in enumerate(data):
-        c = get_colors_old(d[0])
-        if type(c)!=list:
-            colors_old.append(c)
-        else:
-            to_delete.append(i)
     print("getting images of LLD")
-    imgs = np.array([d[0] for i,d in enumerate(data) if i not in to_delete], dtype="uint8")
+    imgs = np.array([d[0] for i,d in enumerate(data)], dtype="uint8")
     print("getting texts of LLD")
-    txts = [d[1] for i,d in enumerate(data) if i not in to_delete]
+    txts = [d[1] for i,d in enumerate(data)]
     print("getting colors of LLD")
-    colors = np.array([d[2] for i,d in enumerate(data) if i not in to_delete], dtype="float32")
+    colors = np.array([d[2] for i,d in enumerate(data)], dtype="float32")
+    print("getting OH-colors of EUDATA")
+    colors_old = np.array([d[3] for i,d in enumerate(data)], dtype="float32")
     print(f"saving to part to {path_out}eudata_prep_pt{batch_nr}.npz")
     np.savez_compressed(os.path.join(path_out, f"eudata_prep_pt{batch_nr}.npz"),
-                        imgs=imgs, colors=colors, txts=txts, colors_old=np.array(colors_old))
+                        imgs=imgs, colors=colors, txts=txts, colors_old=colors_old)
     batch_nr += 1
 
     ################
@@ -259,23 +242,17 @@ def main(path_data, path_data_lld, path_data_metu, path_lbls_metu, resize_size, 
     with concurrent.futures.ProcessPoolExecutor() as executor:
         data = list(tqdm(executor.map(prep_2, paths, resize_size_), total=len(paths)))
     data = [d for d in data if d]
-    print("get colors old")
-    colors_old, to_delete = [], []
-    for i,d in enumerate(data):
-        c = get_colors_old(d[0])
-        if type(c)!=list:
-            colors_old.append(c)
-        else:
-            to_delete.append(i)
     print("getting images of LLD")
-    imgs = np.array([d[0] for i,d in enumerate(data) if i not in to_delete], dtype="uint8")
+    imgs = np.array([d[0] for i,d in enumerate(data)], dtype="uint8")
     print("getting texts of LLD")
-    txts = [d[1] for i,d in enumerate(data) if i not in to_delete]
+    txts = [d[1] for i,d in enumerate(data)]
     print("getting colors of LLD")
-    colors = np.array([d[2] for i,d in enumerate(data) if i not in to_delete], dtype="float32")
+    colors = np.array([d[2] for i,d in enumerate(data)], dtype="float32")
+    print("getting OH-colors of EUDATA")
+    colors_old = np.array([d[3] for i,d in enumerate(data)], dtype="float32")
     print(f"saving to part to {path_out}eudata_prep_pt{batch_nr}.npz")
     np.savez_compressed(os.path.join(path_out, f"eudata_prep_pt{batch_nr}.npz"),
-                        imgs=imgs, colors=colors, txts=txts, colors_old=np.array(colors_old))
+                        imgs=imgs, colors=colors, txts=txts, colors_old=colors_old)
     batch_nr += 1
 
 
@@ -320,8 +297,11 @@ def prep_2(path, resize_size):
     pad_y = (math.ceil(pad_y/2), math.floor(pad_y/2))
     paddings = (pad_x,pad_y,(0,0))
     img_resized = np.pad(img_resized, paddings, constant_values=1)
+    colors_oh = get_colors_old(img_resized)
+    if len(colors_oh)==11:
+        return img_resized.astype("uint8"), "", colors.astype("float32"), colors_oh
+    return None
 
-    return img_resized.astype("uint8"), "", colors.astype("float32")
 
 def prep(path, resize_size):
     with open(path) as fd:
@@ -357,8 +337,6 @@ def prep(path, resize_size):
                     shape = img.shape
                     if ((len(shape)==3) and (shape[-1]>3))or((shape[0]<resize_size[0]) and (shape[1]<resize_size[0])): # skip over faulty images
                         return None
-
-
                     # resize image while keeping aspect ratio
                     ratio = min(resize_size[0]/shape[0], resize_size[1]/shape[1])
                     img_resized = resize(img, (int(shape[0]*ratio), int(shape[1]*ratio)))
@@ -378,10 +356,13 @@ def prep(path, resize_size):
 
                     displayed_text = infos.get("WordMarkSpecification", {}).get("MarkVerbalElementText")
                     colors = get_colors(img_resized)
-                    return img_resized.astype("uint8"), displayed_text if displayed_text else "", colors.astype("float32")
+
+                    colors_oh = get_colors_old(img_resized)
+                    if len(colors_oh)==11:
+                        return img_resized.astype("uint8"), displayed_text if displayed_text else "", colors.astype("float32"), colors_oh
         except Exception as e:
-            print(f"{e}: {path}")
-            return None
+            print(e)
+    return None
 
 if __name__=="__main__":
     path_data      = expanduser("../eudata_unpacked/")

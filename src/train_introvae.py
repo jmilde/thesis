@@ -13,6 +13,11 @@ from datetime import datetime
 import os
 from os.path import expanduser
 from src.hyperparameter import params
+import math
+from skimage.io import imsave
+from src.fid import calculate_frechet_distance
+from src.prep_fid import calc_and_save_reference
+
 
 def show_img(
         img, channel_first=False):
@@ -34,6 +39,7 @@ def main():
     path_data = p['path_data']
     path_log = p['path_log']
     path_spm = p['path_spm']
+    path_fid = p["path_fid"]
     restore_model = p['restore_model']
     img_dim = p['img_dim']
     btlnk = p['btlnk']
@@ -64,6 +70,8 @@ def main():
     ds_size = len(np.load(path_cond, allow_pickle=True)["colors"])
     color_cond_type = p['color_cond_type']
     txt_cond_type = p['txt_cond_type']
+    normalize = p["normalize"]
+    fid_samples_nr = p["fid_samples_nr"]
     color_cond_dim = len(np.load(path_cond, allow_pickle=True)["colors_old" if color_cond_type=="one_hot" else "colors"][1])
 
 
@@ -90,7 +98,7 @@ def main():
     #pipeline
     #bg = batch_resize(path_data, batch_size, img_dim)
     #data = pipe(lambda: bg, (tf.float32), prefetch=6)
-    bg = batch_cond_spm(path_data, path_cond, spm, batch_size, color_cond_type)
+    bg = batch_cond_spm(path_data, path_cond, spm, batch_size, color_cond_type, normalize)
     data = pipe(lambda: bg, (tf.float32, tf.float32, tf.int64), (tf.TensorShape([None, None, None, None]), tf.TensorShape([None, None]), tf.TensorShape([None, None])), prefetch=6)
 
 
@@ -230,7 +238,7 @@ def main():
                     tf.summary.scalar("loss_enc_adv"  , output["loss_enc_adv"].numpy()  , step=step)
                     tf.summary.scalar("loss_dec_adv"  , output["loss_dec_adv"].numpy()  , step=step)
                     writer.flush()
-
+            break
             if step%(logfrq*10)==0:
                  run_tests(model, writer,example_data[0][:4], example_data[1][:4],
                               example_data[2][:4], spm, btlnk,
@@ -239,7 +247,44 @@ def main():
         # save model every epoch
         save_path = manager.save()
         print(f"\nsaved model after epoch {epoch}\n")
+        break
 
+    # calcualte FID Score
+    print("save 50.000 generated samples")
+    norm = 1
+    path_fid_data = os.path.join(path_fid, model_name)
+    if not os.path.isdir(path_fid_data):
+        os.mkdir(path_fid_data)
+    if normalize:
+        norm= 255
+    sample_nr = 0
+    for _ in tqdm(range(math.ceil(fid_samples_nr//batch_size))):
+        output = model.train(*next(data))
+        for img in output["x_p"]:
+            if sample_nr<=fid_samples_nr:
+                try:
+                    imsave(os.path.join(path_fid_data, f"{sample_nr}.png"), np.clip(img*norm, 0, 255).astype("uint8"))
+                    sample_nr += 1
+                except Exception as e:
+                    print(np.clip(img*norm, 0, 255))
+                    break
+            else:
+                break
+    print("caluclate mean and var")
+    calc_and_save_reference(path_fid_data,
+                            os.path.join(path_fid, f"{model_name}.npz"),
+                            inception_path=p["path_inception"])
+
+    print("calculate FID Score")
+    mu1= np.load(os.path.join(path_fid, f"{model_name}.npz"), allow_pickle=True)["mu"]
+    sigma1= np.load(os.path.join(path_fid, f"{model_name}.npz"), allow_pickle=True)["sigma"]
+    mu2= np.load(os.path.join(path_fid, f"mu_var_dataset.npz"), allow_pickle=True)["mu"]
+    sigma2= np.load(os.path.join(path_fid, f"mu_var_dataset.npz"), allow_pickle=True)["sigma"]
+    fid_score = calculate_frechet_distance(mu1, sigma1, mu2, sigma2)
+    print(f"FID SCORE: {fid_score}")
+    with writer.as_default():
+        tf.summary.scalar("FID_score"  , fid_score , step=0)
+        writer.flush()
 
 
 if __name__=="__main__":

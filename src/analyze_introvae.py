@@ -12,6 +12,60 @@ import os
 import tensorflow as tf
 import tensorflow_addons as tfa
 from src.hyperparameter import params
+from src.fid import calculate_frechet_distance
+from src.prep_fid import calc_and_save_reference
+from skimage.io import imsave
+import math
+
+
+def calculate_scores(model, data, writer, path_fid, model_name, batch_size):
+    print("save 50.000 generated samples")
+    norm = 1
+    path_fid_data = os.path.join(path_fid, model_name)
+    if not os.path.isdir(path_fid_data):
+        os.mkdir(path_fid_data)
+    if normalize:
+        norm= 255
+    sample_nr = 0
+    imgs= []
+    for _ in tqdm(range(math.ceil(fid_samples_nr//batch_size))):
+        inpt = next(data)
+        output = model.train(*inpt)
+        imgs.extend(output["x_p"])
+        for img in output["x_p"]:
+            if sample_nr<=fid_samples_nr:
+                imsave(os.path.join(path_fid_data, f"{sample_nr}.png"), np.clip(img*norm, 0, 255).astype("uint8"))
+                sample_nr += 1
+
+            else:
+                break
+
+    print("Calculate MS-SSIM Score")
+    ms_ssim = tf.math.reduce_mean(tf.image.ssim_multiscale(np.array(imgs)[:len(imgs)//2],
+                                                           np.array(imgs)[len(imgs)//2:],
+                                                           1 if normalize else 255,
+                                                           filter_size=8))
+    print(f"MS_SSIM: {ms_ssim}")
+    with writer.as_default():
+        tf.summary.scalar("MS_SSIM_score" , ms_ssim , step=0)
+        writer.flush()
+
+    print("caluclate mean and var")
+    calc_and_save_reference(path_fid_data,
+                            os.path.join(path_fid, f"{model_name}.npz"),
+                            inception_path=p["path_inception"])
+
+    print("calculate FID Score")
+    mu1= np.load(os.path.join(path_fid, f"{model_name}.npz"), allow_pickle=True)["mu"]
+    sigma1= np.load(os.path.join(path_fid, f"{model_name}.npz"), allow_pickle=True)["sigma"]
+    mu2= np.load(os.path.join(path_fid, f"mu_var_dataset.npz"), allow_pickle=True)["mu"]
+    sigma2= np.load(os.path.join(path_fid, f"mu_var_dataset.npz"), allow_pickle=True)["sigma"]
+    fid_score = calculate_frechet_distance(mu1, sigma1, mu2, sigma2)
+    print(f"FID SCORE: {fid_score}")
+    with writer.as_default():
+        tf.summary.scalar("FID_score"  , fid_score , step=0)
+        writer.flush()
+
 
 def show_img(img, channel_first=False):
     if channel_first:

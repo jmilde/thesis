@@ -13,6 +13,8 @@ import pandas as pd
 from sklearn.cluster import MiniBatchKMeans
 import webcolors
 from os.path import expanduser
+from sentence_transformers import SentenceTransformer
+
 ### value to position
 #x=[[a,b,c] for a in range(0,256,85) for b in range(0,256,85) for c in range(0,256,85)]
 #[f"rgb({b},{a},{c})" for a,b,c  in x]
@@ -268,9 +270,17 @@ def main(path_data, path_data_lld, path_data_metu, path_lbls_metu, resize_size, 
         colors_old.extend(data["colors_old"])
         txts.extend(data["txts"])
 
+    # calculate bert sentence embeddings
+    model = SentenceTransformer("distiluse-base-multilingual-cased")
+    txt_embs = model.encode(np.array(txts))
 
 
-    np.savez_compressed(os.path.join(path_out, f"eudata_conditionals.npz"), colors=colors, txts=txts, colors_old=np.array(colors_old))
+
+    np.savez_compressed(os.path.join(path_out, f"eudata_conditionals.npz"),
+                        colors=colors,
+                        txts=txts,
+                        tct_embs = txt_embs
+                        colors_old=np.array(colors_old))
     print(f"Done: saved all images in {path_out}imgs/ and the conditionals as eudata_conditionals.npz")
 
 

@@ -301,7 +301,7 @@ def _handle_path(path, sess, low_profile=False):
     return m, s
 
 
-def calculate_fid_given_paths(paths, inception_path, low_profile=False):
+def calculate_fid_given_paths(path_data, path_generated, inception_path, low_profile=False):
     ''' Calculates the FID of two paths. '''
     inception_path = check_or_download_inception(inception_path)
 
@@ -312,8 +312,8 @@ def calculate_fid_given_paths(paths, inception_path, low_profile=False):
     create_inception_graph(str(inception_path))
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
-        m1, s1 = _handle_path(paths[0], sess, low_profile=low_profile)
-        m2, s2 = _handle_path(paths[1], sess, low_profile=low_profile)
+        m1, s1 = _handle_path(path_data, sess, low_profile=low_profile)
+        m2, s2 = _handle_path(path_generated, sess, low_profile=low_profile)
         fid_value = calculate_frechet_distance(m1, s1, m2, s2)
         return fid_value
 

@@ -1,7 +1,7 @@
 from src.util_tf import batch_cond_spm, pipe, spread_image
 from src.util_io import pform
 from src.models.introvae import INTROVAE
-from src.analyze_introvae import run_tests
+from src.analyze_introvae import run_tests, calculate_scores
 from src.util_sp import load_spm
 import numpy as np
 import h5py
@@ -13,10 +13,7 @@ from datetime import datetime
 import os
 from os.path import expanduser
 from src.hyperparameter import params
-import math
-from skimage.io import imsave
-from src.fid import calculate_frechet_distance
-from src.prep_fid import calc_and_save_reference
+
 
 
 def show_img(
@@ -81,7 +78,7 @@ def main():
         modeltype = f"INTRO{p['epochs']}-m{m_plus}-lr{lr_enc}b1{beta1}b2{beta2}-w_rec{weight_rec}-w_neg{weight_neg}-w_neg{weight_neg}"
     else:
         modeltype = f"VAE{p['vae_epochs']}-b1{beta1}b2{beta2}"
-    txt_info   = f"txt:({txt_cond_type}-dense{cond_dim_txts}-rnn{rnn_dim}-emb{emb_dim})"  if color_cond_type else ""
+    txt_info   = f"txt:({txt_cond_type}-dense{cond_dim_txts}-rnn{rnn_dim}-emb{emb_dim})"  if txt_cond_type else ""
     color_info = f"color:({color_cond_type}{cond_dim_color})" if color_cond_type else ""
     model_name = (f"{modeltype}-lr{lr_enc}-z{btlnk}"
                   f"{color_info}-"
@@ -249,42 +246,10 @@ def main():
         print(f"\nsaved model after epoch {epoch}\n")
         break
 
-    # calcualte FID Score
-    print("save 50.000 generated samples")
-    norm = 1
-    path_fid_data = os.path.join(path_fid, model_name)
-    if not os.path.isdir(path_fid_data):
-        os.mkdir(path_fid_data)
-    if normalize:
-        norm= 255
-    sample_nr = 0
-    for _ in tqdm(range(math.ceil(fid_samples_nr//batch_size))):
-        output = model.train(*next(data))
-        for img in output["x_p"]:
-            if sample_nr<=fid_samples_nr:
-                try:
-                    imsave(os.path.join(path_fid_data, f"{sample_nr}.png"), np.clip(img*norm, 0, 255).astype("uint8"))
-                    sample_nr += 1
-                except Exception as e:
-                    print(np.clip(img*norm, 0, 255))
-                    break
-            else:
-                break
-    print("caluclate mean and var")
-    calc_and_save_reference(path_fid_data,
-                            os.path.join(path_fid, f"{model_name}.npz"),
-                            inception_path=p["path_inception"])
 
-    print("calculate FID Score")
-    mu1= np.load(os.path.join(path_fid, f"{model_name}.npz"), allow_pickle=True)["mu"]
-    sigma1= np.load(os.path.join(path_fid, f"{model_name}.npz"), allow_pickle=True)["sigma"]
-    mu2= np.load(os.path.join(path_fid, f"mu_var_dataset.npz"), allow_pickle=True)["mu"]
-    sigma2= np.load(os.path.join(path_fid, f"mu_var_dataset.npz"), allow_pickle=True)["sigma"]
-    fid_score = calculate_frechet_distance(mu1, sigma1, mu2, sigma2)
-    print(f"FID SCORE: {fid_score}")
-    with writer.as_default():
-        tf.summary.scalar("FID_score"  , fid_score , step=0)
-        writer.flush()
+    # calcualte Scores
+    calculate_scores(model, data, writer, path_fid, model_name, batch_size)
+
 
 
 if __name__=="__main__":

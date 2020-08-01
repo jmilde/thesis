@@ -18,20 +18,19 @@ from skimage.io import imsave
 import math
 
 
-def calculate_scores(model, data, writer, path_fid, model_name, batch_size):
+def calculate_scores(model, data, writer, path_fid, path_inception, model_name,
+                     batch_size, normalize, fid_samples_nr):
     print("save 50.000 generated samples")
-    norm = 1
     path_fid_data = os.path.join(path_fid, model_name)
     if not os.path.isdir(path_fid_data):
         os.mkdir(path_fid_data)
-    if normalize:
-        norm= 255
+    norm= 255 if normalize else 1
     sample_nr = 0
     imgs= []
     for _ in tqdm(range(math.ceil(fid_samples_nr//batch_size))):
         inpt = next(data)
         output = model.train(*inpt)
-        imgs.extend(output["x_p"])
+        imgs.extend(output["x_p"].numpy())
         for img in output["x_p"]:
             if sample_nr<=fid_samples_nr:
                 imsave(os.path.join(path_fid_data, f"{sample_nr}.png"), np.clip(img*norm, 0, 255).astype("uint8"))
@@ -41,9 +40,14 @@ def calculate_scores(model, data, writer, path_fid, model_name, batch_size):
                 break
 
     print("Calculate MS-SSIM Score")
-    ms_ssim = tf.math.reduce_mean(tf.image.ssim_multiscale(np.array(imgs)[:len(imgs)//2],
-                                                           np.array(imgs)[len(imgs)//2:],
-                                                           1 if normalize else 255,
+    imgs = np.array(imgs)[:-1] if len(imgs)%2 else np.array(imgs)
+    imgs = np.clip(imgs*norm, 0, 255)
+    split_a = imgs[:len(imgs)//2]
+    split_b = imgs[len(imgs)//2:]
+
+    ms_ssim = tf.math.reduce_mean(tf.image.ssim_multiscale(split_a,
+                                                           split_b,
+                                                           255,
                                                            filter_size=8))
     print(f"MS_SSIM: {ms_ssim}")
     with writer.as_default():
@@ -53,7 +57,7 @@ def calculate_scores(model, data, writer, path_fid, model_name, batch_size):
     print("caluclate mean and var")
     calc_and_save_reference(path_fid_data,
                             os.path.join(path_fid, f"{model_name}.npz"),
-                            inception_path=p["path_inception"])
+                            inception_path=path_inception)
 
     print("calculate FID Score")
     mu1= np.load(os.path.join(path_fid, f"{model_name}.npz"), allow_pickle=True)["mu"]

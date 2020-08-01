@@ -62,15 +62,7 @@ class INTROVAE(tf.keras.Model):
         return z, mu, lv
 
     def decode(self, z, color=None, txt=None, training=False):
-        if self.color_cond_type and self.txt_cond_type:
-            x_rec = self.decoder(z, color=color, txt=txt, training=training)
-        elif self.color_cond_type:
-            x_rec = self.decoder(z, color=color, training=training)
-        elif self.txt_cond_type:
-            x_rec = self.decoder(z, txt=txt, training=training)
-        else:
-            x_rec = self.decoder(z, training=training)
-        return x_rec
+        return self.decoder(z, color=color, txt=txt, training=training)
 
     def kl_loss(self, mu, lv):
         return tf.reduce_mean(-0.5 * tf.reduce_sum((-1*(tf.square(-mu)+tf.exp(lv))+1+lv),-1))+0.0

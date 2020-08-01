@@ -17,40 +17,26 @@ def spread_image(x, nrow, ncol, height, width):
         , (1, nrow * height, ncol * width, -1))
 
 def batch_cond_spm(path_imgs, path_cond, spm, batch_size, cond_type_color="old",
-                   cond_type_txt, normalize=False, seed=26):
+                   cond_type_txt="bert", normalize=False, seed=26):
     """batch function to use with pipe
     cond_type_color = 'one_hot' or 'continuous'
     """
-    if cond_type_color=="one_hot":
-        color_cond = "colors_old"
-    else:
-        color_cond = "colors"
-    if cond_type_txt=="rnn":
-        txt_cond = "txts"
-    else:
-        txt_conds = "txt_embs"
-    norm=1
-    if normalize:
-        norm = 255
+
+    color_cond = "colors_old" if cond_type_color=="one_hot" else "colors"
+    txt_cond = "txts" if cond_type_txt=="rnn" else  "txt_embs"
+    norm = 255 if normalize else 1
 
     colors = np.load(path_cond, allow_pickle=True)[color_cond]
-    txts   = np.load(path_cond, allow_pickle=True)[txt_conds]
+    txts   = np.load(path_cond, allow_pickle=True)[txt_cond]
 
     i, c, t = [], [], []
     for j in sample(len(colors), seed):
         if batch_size == len(i):
-            yield np.array(i, dtype="float32"),
-            np.array(c, dtype="float32"),
-            vpack(t, (batch_size, max(map(len,t))), fill=1,  dtype="int64")
-
+            yield np.array(i, dtype="float32"), np.array(c, dtype="float32"), vpack(t, (batch_size, max(map(len,t))), fill=1,  dtype="int64")
             i, c, t = [], [], []
-
         i.append(io.imread(os.path.join(path_imgs, f"{j}.png"))/norm)
         c.append(colors[j])
-        if cond_type_txt=="rnn":
-            txt = spm.encode_as_ids(txts[j])
-        else:
-            txt = txts[j]
+        txt = spm.encode_as_ids(txts[j]) if cond_type_txt=="rnn" else txts[j]
         t.append(txt)
 
 

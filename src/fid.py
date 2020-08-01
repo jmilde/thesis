@@ -24,7 +24,7 @@ from __future__ import absolute_import, division, print_function
 import numpy as np
 import os
 import gzip, pickle
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 from imageio import imread
 from scipy import linalg
 import pathlib
@@ -50,7 +50,7 @@ def create_inception_graph(pth):
 #   https://github.com/openai/improved-gan/blob/master/inception_score/model.py
 def _get_inception_layer(sess):
     """Prepares inception net for batched usage and returns pool_3 layer. """
-    layername = 'pool_3:0'
+    layername = 'FID_Inception_Net/pool_3:0'
     pool3 = sess.graph.get_tensor_by_name(layername)
     ops = pool3.graph.get_operations()
     for op_idx, op in enumerate(ops):
@@ -139,7 +139,6 @@ def calculate_frechet_distance(mu1, sigma1, mu2, sigma2, eps=1e-6):
 
     assert mu1.shape == mu2.shape, "Training and test mean vectors have different lengths"
     assert sigma1.shape == sigma2.shape, "Training and test covariances have different dimensions"
-
     diff = mu1 - mu2
 
     # product might be almost singular
@@ -231,7 +230,7 @@ def get_activations_from_files(files, sess, batch_size=50, verbose=False):
         else:
             end = n_imgs
         batch = load_image_batch(files[start:end])
-        pred = sess.run(inception_layer, {'ExpandDims:0': batch})
+        pred = sess.run(inception_layer, {'FID_Inception_Net/ExpandDims:0': batch})
         pred_arr[start:end] = pred.reshape(batch_size,-1)
         del batch #clean up memory
     if verbose:

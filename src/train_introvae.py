@@ -96,7 +96,7 @@ def main():
     #bg = batch_resize(path_data, batch_size, img_dim)
     #data = pipe(lambda: bg, (tf.float32), prefetch=6)
     bg = batch_cond_spm(path_data, path_cond, spm, batch_size, color_cond_type, normalize)
-    data = pipe(lambda: bg, (tf.float32, tf.float32, tf.int64), (tf.TensorShape([None, None, None, None]), tf.TensorShape([None, None]), tf.TensorShape([None, None])), prefetch=6)
+    data = pipe(lambda: bg, (tf.float32, tf.float32, tf.float32), (tf.TensorShape([None, None, None, None]), tf.TensorShape([None, None]), tf.TensorShape([None, None])), prefetch=6)
 
 
     # model
@@ -235,7 +235,6 @@ def main():
                     tf.summary.scalar("loss_enc_adv"  , output["loss_enc_adv"].numpy()  , step=step)
                     tf.summary.scalar("loss_dec_adv"  , output["loss_dec_adv"].numpy()  , step=step)
                     writer.flush()
-            break
             if step%(logfrq*10)==0:
                  run_tests(model, writer,example_data[0][:4], example_data[1][:4],
                               example_data[2][:4], spm, btlnk,
@@ -244,11 +243,10 @@ def main():
         # save model every epoch
         save_path = manager.save()
         print(f"\nsaved model after epoch {epoch}\n")
-        break
-
 
     # calcualte Scores
-    calculate_scores(model, data, writer, path_fid, model_name, batch_size)
+    calculate_scores(model, data, writer, path_fid, p["path_inception"], model_name, batch_size,
+                     normalize, fid_samples_nr)
 
 
 

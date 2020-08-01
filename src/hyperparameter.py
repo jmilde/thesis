@@ -45,21 +45,21 @@ params = {
         "beta1": 0.9},
 
     "train":{
-        #"path_ckpt": expanduser('~/data/models/'),
-        #"path_cond": expanduser('~/data/eudata_conditionals.npz'),
-        #"path_data": expanduser('~/data/imgs'),
-        #"path_log": expanduser("~/cache/tensorboard-logdir/"),
-        #"path_spm": expanduser("~/data/logo_vocab"),
-        #"path_fid": expanduser("~/data/fid/"),
-        #"path_inception": expanduser("~/data/"),
+        "path_ckpt": expanduser('~/data/models/'),
+        "path_cond": expanduser('~/data/eudata_conditionals.npz'),
+        "path_data": expanduser('~/data/imgs'),
+        "path_log": expanduser("~/cache/tensorboard-logdir/"),
+        "path_spm": expanduser("~/data/logo_vocab"),
+        "path_fid": expanduser("~/data/fid/"),
+        "path_inception": expanduser("~/data/"),
 
-        "path_ckpt": expanduser('~/'),
-        "path_cond": expanduser('~/eudata_conditionals.npz'),
-        "path_data": expanduser('~/imgs'),
-        "path_log": expanduser("~/"),
-        "path_spm": expanduser("~/logo_vocab"),
-        "path_fid": expanduser("~/fid/"),
-        "path_inception": expanduser("~/"),
+        #"path_ckpt": expanduser('~/'),
+        #"path_cond": expanduser('~/eudata_conditionals.npz'),
+        #"path_data": expanduser('~/imgs'),
+        #"path_log": expanduser("~/"),
+        #"path_spm": expanduser("~/logo_vocab"),
+        #"path_fid": expanduser("~/fid/"),
+        #"path_inception": expanduser("~/"),
 
         "restore_model":False, #empty or modelname for model stored at path_ckpt
         "color_cond_type": None, #"one_hot", # "continuous"
@@ -92,7 +92,7 @@ params = {
         "weight_rec": 0.5, # beta: og:0.5, 0.01 - 100, larger β improves reconstruction quality but may influence sample diversity
         "weight_kl": 1,
         "weight_neg": 0.25, # alpha: og:0.25, 0.1-0.5
-        "m_plus": 180, #og:110, #250 should be selected according to the value of β, to balance advaserial loss
+        "m_plus": 110, #og:110, #250 should be selected according to the value of β, to balance advaserial loss
         "lr_enc": 0.0002, #0.0002,
         "lr_dec": 0.0002, #0.0002,
         "beta1": 0.9,

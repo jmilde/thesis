@@ -16,6 +16,7 @@ def spread_image(x, nrow, ncol, height, width):
             , (0, 2, 1, 3, 4))
         , (1, nrow * height, ncol * width, -1))
 
+
 def batch_cond_spm(path_imgs, path_cond, spm, batch_size, cond_type_color="old",
                    cond_type_txt="bert", normalize=False, seed=26):
     """batch function to use with pipe
@@ -32,13 +33,12 @@ def batch_cond_spm(path_imgs, path_cond, spm, batch_size, cond_type_color="old",
     i, c, t = [], [], []
     for j in sample(len(colors), seed):
         if batch_size == len(i):
-            yield np.array(i, dtype="float32"), np.array(c, dtype="float32"), vpack(t, (batch_size, max(map(len,t))), fill=1,  dtype="int64")
+            yield np.array(i, dtype="float32")/norm, np.array(c, dtype="float32"), vpack(t, (batch_size, max(map(len,t))), fill=1,  dtype="float32")
             i, c, t = [], [], []
-        i.append(io.imread(os.path.join(path_imgs, f"{j}.png"))/norm)
+        i.append(io.imread(os.path.join(path_imgs, f"{j}.png")))
         c.append(colors[j])
         txt = spm.encode_as_ids(txts[j]) if cond_type_txt=="rnn" else txts[j]
         t.append(txt)
-
 
 
 def batch(path, batch_size, seed=26, channel_first=False):

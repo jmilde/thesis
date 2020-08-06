@@ -95,10 +95,9 @@ def main():
     #pipeline
     #bg = batch_resize(path_data, batch_size, img_dim)
     #data = pipe(lambda: bg, (tf.float32), prefetch=6)
-    bg = batch_cond_spm(path_data, path_cond, spm, batch_size, color_cond_type, normalize)
+    bg = batch_cond_spm(path_data, path_cond, spm, batch_size,
+                        color_cond_type, txt_cond_type, normalize)
     data = pipe(lambda: bg, (tf.float32, tf.float32, tf.float32), (tf.TensorShape([None, None, None, None]), tf.TensorShape([None, None]), tf.TensorShape([None, None])), prefetch=6)
-
-
     # model
     model = INTROVAE(img_dim,
                      channels,
@@ -191,6 +190,7 @@ def main():
 
     # training and logging
     step=0
+    norm = 1 if normalize else 255
     for epoch in trange(epochs, desc="epochs", position=0):
         for _ in trange(ds_size//batch_size, desc="steps in epochs", position=1, leave=False):
             ckpt.step.assign_add(1)
@@ -203,26 +203,29 @@ def main():
                     tf.summary.trace_export(name="introvae", step=0, profiler_outdir=path_log)
                 run_tests(model, writer,example_data[0][:4], example_data[1][:4],
                           example_data[2][:4], spm, btlnk,
-                          img_dim, batch_size=16, step=step,)
+                          img_dim, normalize, batch_size=16, step=step,)
             # logging
             if step%logfrq==0:
                 with writer.as_default():
                     tf.summary.image( "overview",
                                       spread_image(
-                                          np.concatenate((output["x"].numpy()[:3],
-                                                          output["x_r"].numpy()[:3],
-                                                          output["x_p"].numpy()[:3]),
+                                          np.concatenate((output["x"].numpy()[:3]/norm,
+                                                          output["x_r"].numpy()[:3]/norm,
+                                                          output["x_p"].numpy()[:3]/norm),
                                                     axis=0),
                                           3,3,img_dim[0],img_dim[1]),
                                       step=step)
                     tf.summary.image( "x",
-                                      spread_image(output["x"].numpy()[:16],4,4,img_dim[0],img_dim[1]),
+                                      spread_image(output["x"].numpy()[:16]/norm,
+                                                   4,4,img_dim[0],img_dim[1]),
                                       step=step)
                     tf.summary.image( "x_r",
-                                      spread_image(output["x_r"].numpy()[:16],4,4,img_dim[0],img_dim[1]),
+                                      spread_image(output["x_r"].numpy()[:16]/norm,
+                                                   4,4,img_dim[0],img_dim[1]),
                                       step=step)
                     tf.summary.image( "x_p",
-                                      spread_image(output["x_p"].numpy()[:16],4,4,img_dim[0],img_dim[1]),
+                                      spread_image(output["x_p"].numpy()[:16]/norm,
+                                                   4,4,img_dim[0],img_dim[1]),
                                       step=step)
                     tf.summary.scalar("loss_enc" , output["loss_enc"].numpy() , step=step)
                     tf.summary.scalar("loss_dec" , output["loss_dec"].numpy() , step=step)
@@ -238,7 +241,7 @@ def main():
             if step%(logfrq*10)==0:
                  run_tests(model, writer,example_data[0][:4], example_data[1][:4],
                               example_data[2][:4], spm, btlnk,
-                              img_dim, batch_size=16, step=step,)
+                              img_dim, normalize, batch_size=16, step=step,)
 
         # save model every epoch
         save_path = manager.save()

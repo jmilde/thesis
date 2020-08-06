@@ -45,30 +45,35 @@ def calculate_scores(model, data, writer, path_fid, path_inception, model_name,
     split_a = imgs[:len(imgs)//2]
     split_b = imgs[len(imgs)//2:]
 
-    ms_ssim = tf.math.reduce_mean(tf.image.ssim_multiscale(split_a,
-                                                           split_b,
-                                                           255,
-                                                           filter_size=8))
-    print(f"MS_SSIM: {ms_ssim}")
-    with writer.as_default():
-        tf.summary.scalar("MS_SSIM_score" , ms_ssim , step=0)
-        writer.flush()
 
-    print("caluclate mean and var")
-    calc_and_save_reference(path_fid_data,
-                            os.path.join(path_fid, f"{model_name}.npz"),
-                            inception_path=path_inception)
+    with tf.device('/CPU:0'):
+        x = []
+        for a,b in zip(np.array_split(split_a, 5), np.array_split(split_b, 5)):
+            x.extend( tf.image.ssim_multiscale(a,
+                                               b,
+                                               255,
+                                                   filter_size=8))
+        ms_ssim = tf.math.reduce_mean(x)
+        print(f"MS_SSIM: {ms_ssim}")
+        with writer.as_default():
+            tf.summary.scalar("MS_SSIM_score" , ms_ssim , step=0)
+            writer.flush()
 
-    print("calculate FID Score")
-    mu1= np.load(os.path.join(path_fid, f"{model_name}.npz"), allow_pickle=True)["mu"]
-    sigma1= np.load(os.path.join(path_fid, f"{model_name}.npz"), allow_pickle=True)["sigma"]
-    mu2= np.load(os.path.join(path_fid, f"mu_var_dataset.npz"), allow_pickle=True)["mu"]
-    sigma2= np.load(os.path.join(path_fid, f"mu_var_dataset.npz"), allow_pickle=True)["sigma"]
-    fid_score = calculate_frechet_distance(mu1, sigma1, mu2, sigma2)
-    print(f"FID SCORE: {fid_score}")
-    with writer.as_default():
-        tf.summary.scalar("FID_score"  , fid_score , step=0)
-        writer.flush()
+        print("caluclate mean and var")
+        calc_and_save_reference(path_fid_data,
+                                os.path.join(path_fid, f"{model_name}.npz"),
+                                inception_path=path_inception)
+
+        print("calculate FID Score")
+        mu1= np.load(os.path.join(path_fid, f"{model_name}.npz"), allow_pickle=True)["mu"]
+        sigma1= np.load(os.path.join(path_fid, f"{model_name}.npz"), allow_pickle=True)["sigma"]
+        mu2= np.load(os.path.join(path_fid, f"mu_var_dataset.npz"), allow_pickle=True)["mu"]
+        sigma2= np.load(os.path.join(path_fid, f"mu_var_dataset.npz"), allow_pickle=True)["sigma"]
+        fid_score = calculate_frechet_distance(mu1, sigma1, mu2, sigma2)
+        print(f"FID SCORE: {fid_score}")
+        with writer.as_default():
+            tf.summary.scalar("FID_score"  , fid_score , step=0)
+            writer.flush()
 
 
 def show_img(img, channel_first=False):
@@ -84,8 +89,10 @@ def move_through_latent(z_a, z_b, nr_steps):
     return np.array([z_a + step*i for i in range(1, nr_steps+1)])
 
 def run_tests(model, writer, img_embs, colors, txts, spm, btlnk, img_dim,
-              batch_size=16, step=0):
+              normalize, batch_size=16, step=0):
         np.random.seed(27)
+        norm = 1 if normalize else 255
+
 
         x_gen, zs_gen, x_txt, x_color = [], [], [], []
         for img_emb, color, txt in zip(img_embs, colors, txts):
@@ -98,12 +105,12 @@ def run_tests(model, writer, img_embs, colors, txts, spm, btlnk, img_dim,
             cond_txt = None
             if model.txt_cond_type:
                 cond_txt = np.repeat(txt[np.newaxis, :], batch_size, axis=0)
-            x_gen.extend(model.decode(x, cond_color, cond_txt))
+            x_gen.extend(model.decode(x, cond_color, cond_txt)/norm)
 
             # latent space walk from real image to random point
             _, mu, _ = model.encode(img_emb[np.newaxis, :])
             zs = move_through_latent(mu[0], x[0], batch_size)
-            zs_gen.extend(model.decode( zs, cond_color, cond_txt))
+            zs_gen.extend(model.decode( zs, cond_color, cond_txt)/norm)
 
             # text exploration
             if model.txt_cond_type:
@@ -113,7 +120,7 @@ def run_tests(model, writer, img_embs, colors, txts, spm, btlnk, img_dim,
                     cond_color = np.repeat(color[np.newaxis, :], batch_size, axis=0)
                 t = [spm.encode_as_ids(t) for t in ["firma 1", "hallo", "was geht ab",  "kaltes bier", "vogel", "bird", "pelikan", "imperceptron", "albatros coding", "tree leaves", "nice coffee", "german engineering", "abcdef ghij", "klmnopq", "rstu vwxyz", "0123456789"]]
                 cond_txt   = vpack(t, (batch_size, max(map(len,t))), fill=1,  dtype="int64")
-                x_txt.extend(model.decode(x, cond_color, cond_txt))
+                x_txt.extend(model.decode(x, cond_color, cond_txt)/norm)
 
             if model.color_cond_type:
                 # color exploration
@@ -181,22 +188,30 @@ def run_tests(model, writer, img_embs, colors, txts, spm, btlnk, img_dim,
                 cond_txt = None
                 if model.txt_cond_type:
                     cond_txt = np.repeat(txt[np.newaxis, :],  color_batchsize , axis=0)
-                x_color.extend(model.decode(x, cond_color, cond_txt))
+                x_color.extend(model.decode(x, cond_color, cond_txt)/norm)
 
         with writer.as_default():
             tf.summary.image( "change_x",
-                              spread_image(x_gen,1*len(colors),batch_size,img_dim[0],img_dim[1]),
+                              spread_image(x_gen,
+                                           1*len(colors),
+                                           batch_size,img_dim[0],img_dim[1]),
                               step=step)
             tf.summary.image( "latent_walk",
-                              spread_image(zs_gen,1*len(colors),batch_size,img_dim[0],img_dim[1]),
+                              spread_image(zs_gen,
+                                           1*len(colors),
+                                           batch_size,img_dim[0],img_dim[1]),
                               step=step)
             if model.txt_cond_type:
                 tf.summary.image( "change_text",
-                                  spread_image(x_txt,1*len(colors),batch_size,img_dim[0],img_dim[1]),
+                                  spread_image(x_txt,
+                                               1*len(colors),
+                                               batch_size,img_dim[0],img_dim[1]),
                                   step=step)
             if model.color_cond_type:
                 tf.summary.image( "change_color",
-                                  spread_image(x_color,1*len(colors),color_batchsize, img_dim[0],img_dim[1]),
+                                  spread_image(x_color,
+                                               1*len(colors),
+                                               color_batchsize, img_dim[0],img_dim[1]),
                                   step=step)
             writer.flush()
 

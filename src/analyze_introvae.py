@@ -126,12 +126,12 @@ def run_tests(model, writer, img_embs, colors, txts, spm, btlnk, img_dim,
                 # color exploration
                 if model.color_cond_type=="one_hot":
                     cond_color = []
-                    for i in range(12):
-                        zeros = np.zeros(12)
+                    for i in range(11):
+                        zeros = np.zeros(11)
                         zeros[i]=1
                         cond_color.append(zeros)
                     cond_color = np.array(cond_color)
-                    color_batchsize = 12
+                    color_batchsize = 11
                 elif model.color_cond_type=="continuous":
                     color_batchsize=8
                     # blue, black, red, white/green, rainbow, türkis/red/white, black/gold/white

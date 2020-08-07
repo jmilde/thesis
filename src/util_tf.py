@@ -213,10 +213,10 @@ class ResBlock(tf.keras.layers.Layer):
         with tf.name_scope("ResBlock") as scope:
             if self.adjust: inpt = self.adjust(inpt)
             x = self.conv1(inpt)
-            x = self.normalize1(x)
+            x = self.normalize1(x, training=training)
             x = self.activation(x)
             x = self.conv2(x)
-            x = self.dropout(self.activation(self.normalize2(x+inpt)), training=training)
+            x = self.dropout(self.activation(self.normalize2(x+inpt, training=training)), training=training)
         return x
 
 #class ResBlock(Record):

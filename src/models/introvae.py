@@ -17,11 +17,11 @@ class INTROVAE(tf.keras.Model):
                  lr_dec                   = 0.0002,
                  beta1                    = 0.5,
                  beta2                    = 0.999,
-                 noise_color              = 0.1,
-                 noise_txt                = 0.1,
-                 noise_img                = 0.1,
-                 dropout_conditionals     = 0.3,
-                 dropout_encoder_resblock = 0.3,
+                 noise_color              = 0,
+                 noise_txt                = 0,
+                 noise_img                = 0,
+                 dropout_conditionals     = 0,
+                 dropout_encoder_resblock = 0,
                  name                     = "Introvae",
                  **kwargs):
         super(INTROVAE, self).__init__(name=name, **kwargs)
@@ -75,15 +75,9 @@ class INTROVAE(tf.keras.Model):
             return tf.reduce_sum(x)+0.0
 
     def vae_step(self, x, colors, txts, training=True):
-        x         = self.noise_img(self.inpt_layer(x), training=training)
-        if self.txt_cond_type:
-            x_txt = self.inpt_layer_txt(txts)
-        else:
-            x_txt = None
-        if self.color_cond_type:
-            x_color   = self.inpt_layer_cond(colors)
-        else:
-            x_color = None
+        x = self.noise_img(self.inpt_layer(x), training=training)
+        x_txt = self.inpt_layer_txt(txts) if self.txt_cond_type else None
+        x_color = self.inpt_layer_cond(colors) if self.color_cond_type else None
 
         # encode
         z, mu, lv = self.encode(x, training=training)  # encode real image
@@ -118,16 +112,10 @@ class INTROVAE(tf.keras.Model):
         # inpts
         x         = self.inpt_layer(x)
         z_p       = tf.random.normal((self.batch_size, self.btlnk), 0, 1)
-        if self.txt_cond_type:
-            x_txt = self.inpt_layer_txt(txts)
-        else:
-            x_txt = []
-        if self.color_cond_type:
-            x_color   = self.inpt_layer_cond(colors)
-        else:
-            x_color = []
-        #########
 
+        x_txt     = self.inpt_layer_txt(txts) if self.txt_cond_type else None
+        x_color   = self.inpt_layer_cond(colors) if self.color_cond_type else None
+        #########
 
         z, mu, lv = self.encode(x, training=training)  # encode real image
         x_r       = self.decode(z, x_color, x_txt, training=training)  # reconstruct real image
@@ -135,8 +123,6 @@ class INTROVAE(tf.keras.Model):
 
         # reconstruction loss
         loss_rec =  self.mse_loss(x, x_r)* self.weight_rec
-
-
 
         # no gradient flow for encoder
         _, mu_r_, lv_r_ = self.encode(tf.stop_gradient(x_r), training=training) # encode reconstruction
@@ -148,36 +134,34 @@ class INTROVAE(tf.keras.Model):
         kl_fake_ = self.kl_loss(mu_p_, lv_p_)
         loss_enc_adv =(kl_real + 0.5*(self.relu(self.m_plus - kl_rec_) + self.relu(self.m_plus-kl_fake_))*self.weight_neg)* self.weight_kl
 
-
         ### ENCODER LOSS
         loss_enc = loss_rec + loss_enc_adv
 
 
         # gradient flow for decoder
-        _, mu_r, lv_r = self.encode(x_r, training=training) # encode reconstruction
-        _, mu_p, lv_p = self.encode(x_p, training=training) # encode fake
+        _, dec_mu_r, dec_lv_r = self.encode(x_r, training=training) # encode reconstruction
+        _, dec_mu_p, dec_lv_p = self.encode(x_p, training=training) # encode fake
 
         ### DECODER
-        kl_rec  = self.kl_loss(mu_r, lv_r)
-        kl_fake = self.kl_loss(mu_p, lv_p)
+        kl_rec       = self.kl_loss(dec_mu_r, dec_lv_r)
+        kl_fake      = self.kl_loss(dec_mu_p, dec_lv_p)
         loss_dec_adv = 0.5*(kl_rec + kl_fake) * self.weight_kl
-        loss_dec = loss_dec_adv + loss_rec
+        loss_dec     = loss_dec_adv + loss_rec
 
-
-
-        return {"x"        : x,
-                "x_r"      : x_r,
-                "x_p"      : x_p,
-                "loss_enc" : loss_enc,
-                "loss_dec" : loss_dec,
-                "loss_rec" : loss_rec,
-                "kl_real"  : kl_real,
-                "kl_rec"   : kl_rec,
-                "kl_fake"  : kl_fake,
-                "loss_enc_adv": loss_enc_adv,
-                "loss_dec_adv": loss_dec_adv,
-                "mu"       : tf.reduce_mean(mu),
-                "lv"       : tf.reduce_mean(lv)}
+        return {"x"            : x,
+                "z_p"          : z_p,
+                "x_r"          : x_r,
+                "x_p"          : x_p,
+                "loss_enc"     : loss_enc,
+                "loss_dec"     : loss_dec,
+                "loss_rec"     : loss_rec,
+                "kl_real"      : kl_real,
+                "kl_rec"       : kl_rec,
+                "kl_fake"      : kl_fake,
+                "mu"           : tf.reduce_mean(mu),
+                "lv"           : tf.reduce_mean(lv),
+                "loss_enc_adv" : loss_enc_adv,
+                "loss_dec_adv" : loss_dec_adv,}
 
 
     @tf.function(experimental_relax_shapes=True)
@@ -199,7 +183,7 @@ class Encoder(tf.keras.layers.Layer):
                  latent_dim,
                  normalizer=tf.keras.layers.BatchNormalization,
                  name="Encoder",
-                 dropout_rate=0.2,
+                 dropout_rate=0,
                  **kwargs):
         super(Encoder, self).__init__(name=name, **kwargs)
 
@@ -257,10 +241,6 @@ class Decoder(tf.keras.layers.Layer):
         self.dec_reshape_dim = (-1, int(xy_dim), int(xy_dim), channels[0])
 
 
-        # conditionals
-        if color_cond_type == "one_hot":
-            self.color_emb    = tf.keras.layers.Embedding(input_dim=color_onehot_dim,
-                                                          output_dim=cond_dim_colors)
         if color_cond_type:
             self.dense_cond_color = tf.keras.layers.Dense(cond_dim_colors,
                                                           name="dense_cond_color")
@@ -268,12 +248,12 @@ class Decoder(tf.keras.layers.Layer):
             self.noise_color      = tf.keras.layers.GaussianNoise(noise_color)
 
         if txt_cond_type:
-            self.RNN              = GRU_bidirectional(rnn_dim, vocab_dim, emb_dim)
             self.dense_cond_txt   = tf.keras.layers.Dense(cond_dim_txts,
                                                           name="dense_cond_txt")
             self.dropout_txt      = tf.keras.layers.Dropout(dropout_conditionals)
             self.noise_txt        = tf.keras.layers.GaussianNoise(noise_txt)
-
+        if txt_cond_type=="rnn":
+            self.RNN              = GRU_bidirectional(rnn_dim, vocab_dim, emb_dim)
 
         self.dense_resize     = tf.keras.layers.Dense(xy_dim*xy_dim*channels[0],
                                                       name="dense_resize")
@@ -297,17 +277,18 @@ class Decoder(tf.keras.layers.Layer):
         #    color = self.color_emb(color)
         if self.color_cond_type: # if continous embedding or one hot then this layer is added
             cond_color = self.dropout_color(self.noise_color(self.relu(self.dense_cond_color(color)), training), training)
+        if self.txt_cond_type=="one_hot":
+            txt = self.RNN(txt)
         if self.txt_cond_type:
-            cond_txts  = self.dropout_txt(self.noise_txt(self.relu(self.dense_cond_txt(self.RNN(txt))), training), training)
+            cond_txts  = self.dropout_txt(self.noise_txt(self.relu(self.dense_cond_txt(txt)),training),training)
 
+        x = z
         if self.txt_cond_type and self.color_cond_type:
             x = tf.concat([z, cond_color, cond_txts], 1)
         elif self.txt_cond_type:
             x = tf.concat([z, cond_txts], 1)
         elif self.color_cond_type:
             x = tf.concat([z, cond_color], 1)
-        else:
-            x = z
 
         x = self.relu(self.dense_resize(x))
         x = tf.reshape(x, self.dec_reshape_dim)

@@ -5,7 +5,7 @@ from src.models.introvae import INTROVAE
 from src.util_io import pform
 from src.util_np import np, vpack
 from src.util_sp import load_spm
-from src.util_tf import batch_resize, batch_cond_spm, batch, pipe, spread_image
+from src.util_tf import batch_cond_spm, pipe, spread_image
 from tqdm import trange,tqdm
 import h5py
 import os
@@ -19,12 +19,11 @@ import math
 
 
 def calculate_scores(model, data, writer, path_fid, path_inception, model_name,
-                     batch_size, normalize, fid_samples_nr):
+                     batch_size, fid_samples_nr):
     print("save 50.000 generated samples")
     path_fid_data = os.path.join(path_fid, model_name)
     if not os.path.isdir(path_fid_data):
         os.mkdir(path_fid_data)
-    norm= 255 if normalize else 1
     sample_nr = 0
     imgs= []
     for _ in tqdm(range(math.ceil(fid_samples_nr//batch_size))):
@@ -33,7 +32,7 @@ def calculate_scores(model, data, writer, path_fid, path_inception, model_name,
         imgs.extend(output["x_p"].numpy())
         for img in output["x_p"]:
             if sample_nr<=fid_samples_nr:
-                imsave(os.path.join(path_fid_data, f"{sample_nr}.png"), np.clip(img*norm, 0, 255).astype("uint8"))
+                imsave(os.path.join(path_fid_data, f"{sample_nr}.png"), np.clip(img, 0, 255).astype("uint8"))
                 sample_nr += 1
 
             else:
@@ -41,7 +40,7 @@ def calculate_scores(model, data, writer, path_fid, path_inception, model_name,
 
     print("Calculate MS-SSIM Score")
     imgs = np.array(imgs)[:-1] if len(imgs)%2 else np.array(imgs)
-    imgs = np.clip(imgs*norm, 0, 255)
+    imgs = np.clip(imgs, 0, 255)
     split_a = imgs[:len(imgs)//2]
     split_b = imgs[len(imgs)//2:]
 
@@ -88,29 +87,24 @@ def move_through_latent(z_a, z_b, nr_steps):
     step = np.asarray((z_b-z_a)/nr_steps)
     return np.array([z_a + step*i for i in range(1, nr_steps+1)])
 
-def run_tests(model, writer, img_embs, colors, txts, spm, btlnk, img_dim,
-              normalize, batch_size=16, step=0):
-        np.random.seed(27)
-        norm = 1 if normalize else 255
 
+def run_tests(model, writer, img_embs, colors, txts, spm, btlnk, img_dim,
+              batch_size=16, step=0):
+        np.random.seed(27)
 
         x_gen, zs_gen, x_txt, x_color = [], [], [], []
         for img_emb, color, txt in zip(img_embs, colors, txts):
 
             # from random noise with color and txt from real examples
             x    = np.random.normal(0,1,(batch_size, btlnk))
-            cond_color = None
-            if model.color_cond_type:
-                cond_color = np.repeat(color[np.newaxis, :], batch_size, axis=0)
-            cond_txt = None
-            if model.txt_cond_type:
-                cond_txt = np.repeat(txt[np.newaxis, :], batch_size, axis=0)
-            x_gen.extend(model.decode(x, cond_color, cond_txt)/norm)
+            cond_color = np.repeat(color[np.newaxis, :], batch_size, axis=0) if model.color_cond_type else None
+            cond_txt = np.repeat(txt[np.newaxis, :], batch_size, axis=0)  if model.txt_cond_type else None
+            x_gen.extend(model.decode(x, cond_color, cond_txt).numpy())
 
             # latent space walk from real image to random point
             _, mu, _ = model.encode(img_emb[np.newaxis, :])
             zs = move_through_latent(mu[0], x[0], batch_size)
-            zs_gen.extend(model.decode( zs, cond_color, cond_txt)/norm)
+            zs_gen.extend(model.decode( zs, cond_color, cond_txt))
 
             # text exploration
             if model.txt_cond_type:
@@ -120,7 +114,7 @@ def run_tests(model, writer, img_embs, colors, txts, spm, btlnk, img_dim,
                     cond_color = np.repeat(color[np.newaxis, :], batch_size, axis=0)
                 t = [spm.encode_as_ids(t) for t in ["firma 1", "hallo", "was geht ab",  "kaltes bier", "vogel", "bird", "pelikan", "imperceptron", "albatros coding", "tree leaves", "nice coffee", "german engineering", "abcdef ghij", "klmnopq", "rstu vwxyz", "0123456789"]]
                 cond_txt   = vpack(t, (batch_size, max(map(len,t))), fill=1,  dtype="int64")
-                x_txt.extend(model.decode(x, cond_color, cond_txt)/norm)
+                x_txt.extend(model.decode(x, cond_color, cond_txt))
 
             if model.color_cond_type:
                 # color exploration
@@ -188,7 +182,7 @@ def run_tests(model, writer, img_embs, colors, txts, spm, btlnk, img_dim,
                 cond_txt = None
                 if model.txt_cond_type:
                     cond_txt = np.repeat(txt[np.newaxis, :],  color_batchsize , axis=0)
-                x_color.extend(model.decode(x, cond_color, cond_txt)/norm)
+                x_color.extend(model.decode(x, cond_color, cond_txt))
 
         with writer.as_default():
             tf.summary.image( "change_x",
@@ -330,29 +324,3 @@ def load_model():
     ckpt.restore(manager.latest_checkpoint)
     print("\nmodel restored\n")
     return model
-
-
-def main():
-    #
-    model =  load_model()
-    # load sentence piece model
-    spm = load_spm(path_spm + ".model")
-    spm.SetEncodeExtraOptions("bos:eos") # enable start(=2)/end(=1) symbols
-
-    conds = np.array([[0.  , 0.6  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
-               0.  , 0.  , 0.  , 0.4  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.,
-               0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0. ,
-               0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0., 0. ,
-               0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0. ,
-               0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0. ],
-            [0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
-               0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.66,
-               0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
-               0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.04, 0.  ,
-               0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
-               0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.3 ]])
-    run_tests(model, writer, conds, spm, btlnk, batch_size)
-
-
-if __name__=="__main__":
-    main()

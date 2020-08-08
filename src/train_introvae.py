@@ -15,14 +15,6 @@ from os.path import expanduser
 from src.hyperparameter import params
 
 
-
-def show_img(
-        img, channel_first=False):
-    if channel_first:
-        img = np.rollaxis(img, 0,3)
-    plt.imshow(img)
-    plt.show()
-
 def main():
     gpus = tf.config.experimental.list_physical_devices('GPU')
     if gpus:
@@ -67,7 +59,6 @@ def main():
     ds_size = len(np.load(path_cond, allow_pickle=True)["colors"])
     color_cond_type = p['color_cond_type']
     txt_cond_type = p['txt_cond_type']
-    normalize = p["normalize"]
     fid_samples_nr = p["fid_samples_nr"]
     color_cond_dim = len(np.load(path_cond, allow_pickle=True)["colors_old" if color_cond_type=="one_hot" else "colors"][1])
 
@@ -75,7 +66,7 @@ def main():
     if p["vae_epochs"] and p["epochs"]:
         modeltype = f"INTRO{p['epochs']}_pre{p['vae_epochs']}-m{m_plus}-b1{beta1}b2{beta2}-w_rec{weight_rec}-w_neg{weight_neg}"
     elif p["epochs"]:
-        modeltype = f"INTRO{p['epochs']}-m{m_plus}-lr{lr_enc}b1{beta1}b2{beta2}-w_rec{weight_rec}-w_neg{weight_neg}-w_neg{weight_neg}"
+        modeltype = f"INTRO{p['epochs']}-m{m_plus}-lr{lr_enc}b1{beta1}b2{beta2}-w_rec{weight_rec}-w_neg{weight_neg}"
     else:
         modeltype = f"VAE{p['vae_epochs']}-b1{beta1}b2{beta2}"
     txt_info   = f"txt:({txt_cond_type}-dense{cond_dim_txts}-rnn{rnn_dim}-emb{emb_dim})"  if txt_cond_type else ""
@@ -92,12 +83,14 @@ def main():
     spm = load_spm(path_spm + ".model")
     spm.SetEncodeExtraOptions("bos:eos") # enable start(=2)/end(=1) symbols
     vocab_dim = spm.vocab_size()
+
     #pipeline
-    #bg = batch_resize(path_data, batch_size, img_dim)
-    #data = pipe(lambda: bg, (tf.float32), prefetch=6)
     bg = batch_cond_spm(path_data, path_cond, spm, batch_size,
-                        color_cond_type, txt_cond_type, normalize)
-    data = pipe(lambda: bg, (tf.float32, tf.float32, tf.float32), (tf.TensorShape([None, None, None, None]), tf.TensorShape([None, None]), tf.TensorShape([None, None])), prefetch=6)
+                        color_cond_type, txt_cond_type)
+    data = pipe(lambda: bg, (tf.float32, tf.float32, tf.float32),
+                (tf.TensorShape([None, None, None, None]),
+                 tf.TensorShape([None, None]),
+                 tf.TensorShape([None, None])), prefetch=6)
     # model
     model = INTROVAE(img_dim,
                      channels,
@@ -190,41 +183,40 @@ def main():
 
     # training and logging
     step=0
-    norm = 1 if normalize else 255
+
     for epoch in trange(epochs, desc="epochs", position=0):
         for _ in trange(ds_size//batch_size, desc="steps in epochs", position=1, leave=False):
             ckpt.step.assign_add(1)
             step+=1 #using ckpt.step leads to memory leak
             output = model.train(*next(data))
-
             # get graph
             if step==1 and not vae_epochs:
                 with writer.as_default():
                     tf.summary.trace_export(name="introvae", step=0, profiler_outdir=path_log)
                 run_tests(model, writer,example_data[0][:4], example_data[1][:4],
                           example_data[2][:4], spm, btlnk,
-                          img_dim, normalize, batch_size=16, step=step,)
+                          img_dim, batch_size=16, step=step,)
             # logging
             if step%logfrq==0:
                 with writer.as_default():
                     tf.summary.image( "overview",
                                       spread_image(
-                                          np.concatenate((output["x"].numpy()[:3]/norm,
-                                                          output["x_r"].numpy()[:3]/norm,
-                                                          output["x_p"].numpy()[:3]/norm),
+                                          np.concatenate((output["x"].numpy()[:3],
+                                                          output["x_r"].numpy()[:3],
+                                                          output["x_p"].numpy()[:3]),
                                                     axis=0),
                                           3,3,img_dim[0],img_dim[1]),
                                       step=step)
                     tf.summary.image( "x",
-                                      spread_image(output["x"].numpy()[:16]/norm,
+                                      spread_image(output["x"].numpy()[:16],
                                                    4,4,img_dim[0],img_dim[1]),
                                       step=step)
                     tf.summary.image( "x_r",
-                                      spread_image(output["x_r"].numpy()[:16]/norm,
+                                      spread_image(output["x_r"].numpy()[:16],
                                                    4,4,img_dim[0],img_dim[1]),
                                       step=step)
                     tf.summary.image( "x_p",
-                                      spread_image(output["x_p"].numpy()[:16]/norm,
+                                      spread_image(output["x_p"].numpy()[:16],
                                                    4,4,img_dim[0],img_dim[1]),
                                       step=step)
                     tf.summary.scalar("loss_enc" , output["loss_enc"].numpy() , step=step)
@@ -241,7 +233,7 @@ def main():
             if step%(logfrq*10)==0:
                  run_tests(model, writer,example_data[0][:4], example_data[1][:4],
                               example_data[2][:4], spm, btlnk,
-                              img_dim, normalize, batch_size=16, step=step,)
+                              img_dim, batch_size=16, step=step,)
 
         # save model every epoch
         save_path = manager.save()
@@ -249,7 +241,7 @@ def main():
 
     # calcualte Scores
     calculate_scores(model, data, writer, path_fid, p["path_inception"], model_name, batch_size,
-                     normalize, fid_samples_nr)
+                     fid_samples_nr)
 
 
 

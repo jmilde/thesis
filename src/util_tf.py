@@ -18,14 +18,13 @@ def spread_image(x, nrow, ncol, height, width):
 
 
 def batch_cond_spm(path_imgs, path_cond, spm, batch_size, cond_type_color="old",
-                   cond_type_txt="bert", normalize=False, seed=26):
+                   cond_type_txt="bert", seed=26):
     """batch function to use with pipe
     cond_type_color = 'one_hot' or 'continuous'
     """
 
     color_cond = "colors_old" if cond_type_color=="one_hot" else "colors"
     txt_cond = "txts" if cond_type_txt=="rnn" else  "txt_embs"
-    norm = 255 if normalize else 1
 
     colors = np.load(path_cond, allow_pickle=True)[color_cond]
     txts   = np.load(path_cond, allow_pickle=True)[txt_cond]
@@ -33,71 +32,13 @@ def batch_cond_spm(path_imgs, path_cond, spm, batch_size, cond_type_color="old",
     i, c, t = [], [], []
     for j in sample(len(colors), seed):
         if batch_size == len(i):
-            yield np.array(i, dtype="float32")/norm, np.array(c, dtype="float32"), vpack(t, (batch_size, max(map(len,t))), fill=1,  dtype="float32")
+            yield np.array(i, dtype="float32"), np.array(c, dtype="float32"), vpack(t, (batch_size, max(map(len,t))), fill=1,  dtype="float32")
             i, c, t = [], [], []
-        i.append(io.imread(os.path.join(path_imgs, f"{j}.png")))
+        i.append(io.imread(os.path.join(path_imgs, f"{j}.png"))/255)
         c.append(colors[j])
         txt = spm.encode_as_ids(txts[j]) if cond_type_txt=="rnn" else txts[j]
         t.append(txt)
 
-
-def batch(path, batch_size, seed=26, channel_first=False):
-    """batch function to use with pipe"""
-    ds = h5py.File(path, 'r')
-    data = ds["data"]
-    b = []
-    for i in sample(len(data), seed):
-        if batch_size == len(b):
-            yield np.array(b, dtype=np.float32)
-            b = []
-        if channel_first:
-            b.append(data[i].astype(np.float32)/255)
-            #b.append(data[ixb].astype(np.float32)/255)
-        else:
-            b.append(resize(np.rollaxis(data[i], 0, 3), (384,384))/255)
-
-def batch_resize_cond(path, path_cond, batch_size, size=(64,64), seed=26):
-    """batch function to use with pipe"""
-    ds     = h5py.File(path, 'r')
-    data   = ds["data"]
-    shapes = ds["shapes"]
-    conds = np.load(path_cond, allow_pickle=True)["colors"]
-    b = []
-    for i in sample(len(data), seed):
-        if batch_size == len(b):
-            yield np.array(b, dtype=np.float32)
-            b, c = [], []
-        shape = shapes[i]
-        b.append(resize(np.rollaxis(data[i][:,:shape[1], :shape[2]],0,3), size)/255)
-        c.append(conds[i])
-
-
-def batch_resize(path, batch_size, size=(64,64), seed=26):
-    """batch function to use with pipe"""
-    ds     = h5py.File(path, 'r')
-    data   = ds["data"]
-    shapes = ds["shapes"]
-    b = []
-    for i in sample(len(data), seed):
-        if batch_size == len(b):
-            yield np.array(b), np.array(a)
-            b = []
-        shape = shapes[i]
-        b.append(resize(np.rollaxis(data[i][:,:shape[1], :shape[2]],0,3), size)/255)
-
-
-def batch_resized(path, batch_size, seed=26, channel_first=False):
-    """batch function to use with pipe"""
-    data = np.load(path)["imgs"]
-    b = []
-    for i in sample(len(data), seed):
-        if batch_size == len(b):
-            yield np.array(b, dtype=np.float32)
-            b = []
-        if channel_first:
-            b.append(np.rollaxis(data[i], 0, 3)/255)
-        else:
-            b.append(data[i]/255)
 
 def pipe(generator, output_types, output_shapes=None, prefetch=1, repeat=-1, name='pipe', **kwargs):
     """see `tf.data.Dataset.from_generator`."""
@@ -106,6 +47,60 @@ def pipe(generator, output_types, output_shapes=None, prefetch=1, repeat=-1, nam
                           .prefetch(prefetch) \
                           .__iter__()
 
+
+class VariationalEncoding(tf.keras.layers.Layer):
+    def __init__(self, btlnk,
+                 name="VariationalEncoding",
+                 **kwargs):
+        super(VariationalEncoding, self).__init__(name=name, **kwargs)
+        self.relu = tf.keras.layers.ReLU()
+        self.flatten = tf.keras.layers.Flatten(data_format="channels_last")
+        #self.dense_btlnk = tf.keras.layers.Dense(btlnk)
+        #self.normalize = tf.keras.layers.LayerNormalization()
+        self.dense_mu = tf.keras.layers.Dense(btlnk)
+        self.dense_lv = tf.keras.layers.Dense(btlnk)
+
+    def call(self, x, training=True):
+        with tf.name_scope("variational") as scope:
+            x = self.flatten(x)
+            #x = self.relu(self.dense_btlnk(x))
+            #x = self.normalize()
+            with tf.name_scope("latent") as scope:
+                mu = self.dense_mu(x)
+                lv = self.dense_lv(x)
+            with tf.name_scope('z') as scope:
+                z = mu + tf.exp(0.5 * lv) * tf.random.normal(shape=tf.shape(lv))
+        return z, mu, lv
+
+
+class ResBlock(tf.keras.layers.Layer):
+    def __init__(self, nr_filters,
+                 adjust_channels=False,
+                 normalizer=tf.keras.layers.BatchNormalization,
+                 activation=tf.keras.layers.LeakyReLU(alpha=0.2),
+                 dropout_rate=0):
+        super(ResBlock, self).__init__(name='ResBlock')
+
+
+        if adjust_channels: self.adjust = tf.keras.layers.Conv2D(nr_filters, kernel_size=1, padding="same", use_bias=False)
+        else: self.adjust = None
+
+        self.activation = activation
+        self.conv1 = tf.keras.layers.Conv2D(nr_filters, kernel_size=3, padding="same", use_bias=False)
+        self.normalize1 = normalizer()
+        self.conv2 = tf.keras.layers.Conv2D(nr_filters, kernel_size=3, padding="same", use_bias=False)
+        self.normalize2 = normalizer()
+        self.dropout= tf.keras.layers.Dropout(dropout_rate)
+
+    def call(self, inpt, training=False):
+        with tf.name_scope("ResBlock") as scope:
+            if self.adjust: inpt = self.adjust(inpt)
+            x = self.conv1(inpt)
+            x = self.normalize1(x, training=training)
+            x = self.activation(x)
+            x = self.conv2(x)
+            x = self.dropout(self.activation(self.normalize2(x+inpt, training=training)), training=training)
+        return x
 
 class downsampling_conv_block(Record):
     def __init__(self, filters, norm_func, strides=2, kernel_size=4):
@@ -189,78 +184,6 @@ class upsampling_res_block(Record):
 def sigmoid(x, shift=0.0, mult=20):
     """ squashes a value with a sigmoid"""
     return tf.constant(1.0) / (tf.constant(1.0) + tf.exp(-tf.constant(1.0) * (x * mult)))
-
-class ResBlock(tf.keras.layers.Layer):
-    def __init__(self, nr_filters,
-                 adjust_channels=False,
-                 normalizer=tf.keras.layers.BatchNormalization,
-                 activation=tf.keras.layers.LeakyReLU(alpha=0.2),
-                 dropout_rate=0.2):
-        super(ResBlock, self).__init__(name='ResBlock')
-
-
-        if adjust_channels: self.adjust = tf.keras.layers.Conv2D(nr_filters, kernel_size=1, padding="same", use_bias=False)
-        else: self.adjust = None
-
-        self.activation = activation
-        self.conv1 = tf.keras.layers.Conv2D(nr_filters, kernel_size=3, padding="same", use_bias=False)
-        self.normalize1 = normalizer()
-        self.conv2 = tf.keras.layers.Conv2D(nr_filters, kernel_size=3, padding="same", use_bias=False)
-        self.normalize2 = normalizer()
-        self.dropout= tf.keras.layers.Dropout(dropout_rate)
-
-    def call(self, inpt, training=False):
-        with tf.name_scope("ResBlock") as scope:
-            if self.adjust: inpt = self.adjust(inpt)
-            x = self.conv1(inpt)
-            x = self.normalize1(x, training=training)
-            x = self.activation(x)
-            x = self.conv2(x)
-            x = self.dropout(self.activation(self.normalize2(x+inpt, training=training)), training=training)
-        return x
-
-#class ResBlock(Record):
-#    def __init__(self, nr_filters, normalizer=tf.keras.layers.BatchNormalization):
-#            self.relu = tf.keras.layers.ReLU()
-#            self.conv1 = tf.keras.layers.Conv2D(nr_filters, kernel_size=3, padding="same")
-#            self.normalize1 = normalizer()
-#            self.conv2 = tf.keras.layers.Conv2D(nr_filters, kernel_size=3, padding="same")
-#            self.normalize2 = normalizer()
-#
-#    def __call__(self, inpt):
-#        with tf.name_scope("ResBlock") as scope:
-#            x = self.conv1(inpt)
-#            #x = self.normalize1(x)
-#            x = self.relu(x)
-#            x = self.conv2(x)
-#            #x = self.normalize2(x)
-#            x = self.relu(x+inpt)
-#        return x
-
-
-class VariationalEncoding(tf.keras.layers.Layer):
-    def __init__(self, btlnk,
-                 name="VariationalEncoding",
-                 **kwargs):
-        super(VariationalEncoding, self).__init__(name=name, **kwargs)
-        self.relu = tf.keras.layers.ReLU()
-        self.flatten = tf.keras.layers.Flatten(data_format="channels_last")
-        #self.dense_btlnk = tf.keras.layers.Dense(btlnk)
-        #self.normalize = tf.keras.layers.LayerNormalization()
-        self.dense_mu = tf.keras.layers.Dense(btlnk)
-        self.dense_lv = tf.keras.layers.Dense(btlnk)
-
-    def call(self, x, training=True):
-        with tf.name_scope("variational") as scope:
-            x = self.flatten(x)
-            #x = self.relu(self.dense_btlnk(x))
-            #x = self.normalize()
-            with tf.name_scope("latent") as scope:
-                mu = self.dense_mu(x)
-                lv = self.dense_lv(x)
-            with tf.name_scope('z') as scope:
-                z = mu + tf.exp(0.5 * lv) * tf.random.normal(shape=tf.shape(lv))
-        return z, mu, lv
 
 
 class Quantizer(tf.keras.layers.Layer):

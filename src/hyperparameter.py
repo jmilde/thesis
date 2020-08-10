@@ -1,5 +1,6 @@
 from os.path import expanduser
 import tensorflow as tf
+import tensorflow_addons as tfa
 params = {
     "256":{
         "path_ckpt": expanduser('~/models/'),
@@ -60,7 +61,7 @@ params = {
         #"path_spm": expanduser("~/logo_vocab"),
         #"path_fid": expanduser("~/fid/"),
         #"path_inception": expanduser("~/"),
-
+        "gpu": 0,
         "restore_model":False, #empty or modelname for model stored at path_ckpt
         "color_cond_type": None, #"one_hot", # "continuous"
         "txt_cond_type": None, #"rnn" #"bert"
@@ -86,14 +87,14 @@ params = {
         "batch_size": 64,
         "logs_per_epoch": 100,  # log ~100x per epoch
         "fid_samples_nr": 50000,
-        'normalizer_enc': tf.keras.layers.BatchNormalization,
-        'normalizer_dec': tf.keras.layers.BatchNormalization,
+        'normalizer_enc': tf.keras.layers.BatchNormalization, # tfa.layers.InstanceNormalization,
+        'normalizer_dec': tf.keras.layers.BatchNormalization, # tfa.layers.GroupNormalization
 
         ### loss weights
-        "weight_rec": 0.1, # beta: og:0.5, 0.01 - 100, larger β improves reconstruction quality but may influence sample diversity
+        "weight_rec": 0.5, # beta: og:0.5, 0.01 - 100, larger β improves reconstruction quality but may influence sample diversity
         "weight_kl": 1,
         "weight_neg": 0.25, # alpha: og:0.25, 0.1-0.5
-        "m_plus": 200, #og:110, #250 should be selected according to the value of β, to balance advaserial loss
+        "m_plus": 110, #og:110, #250 should be selected according to the value of β, to balance advaserial loss
         "lr_enc": 0.0002, #0.0002,
         "lr_dec": 0.0002, #0.0002,
         "beta1": 0.9,

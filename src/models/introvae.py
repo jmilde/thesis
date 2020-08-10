@@ -282,15 +282,14 @@ class Decoder(tf.keras.layers.Layer):
         if self.txt_cond_type:
             cond_txts  = self.dropout_txt(self.noise_txt(self.relu(self.dense_cond_txt(txt)),training),training)
 
-        x = z
         if self.txt_cond_type and self.color_cond_type:
-            x = tf.concat([z, cond_color, cond_txts], 1)
+            z = tf.concat([z, cond_color, cond_txts], 1)
         elif self.txt_cond_type:
-            x = tf.concat([z, cond_txts], 1)
+            z = tf.concat([z, cond_txts], 1)
         elif self.color_cond_type:
-            x = tf.concat([z, cond_color], 1)
+            z = tf.concat([z, cond_color], 1)
 
-        x = self.relu(self.dense_resize(x))
+        x = self.relu(self.dense_resize(z))
         x = tf.reshape(x, self.dec_reshape_dim)
 
         for layer in self.layers:

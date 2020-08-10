@@ -16,12 +16,14 @@ from src.hyperparameter import params
 
 
 def main():
+    p = params["train"]
+
     gpus = tf.config.experimental.list_physical_devices('GPU')
     if gpus:
-        tf.config.experimental.set_visible_devices(gpus[0], 'GPU')
-        tf.config.experimental.set_memory_growth(gpus[0], True)
+        if len(gpus)>=p["gpu"]:
+            tf.config.experimental.set_visible_devices(gpus[p["gpu"]], 'GPU')
+            tf.config.experimental.set_memory_growth(gpus[p["gpu"]], True)
 
-    p = params["train"]
 
     path_ckpt = p['path_ckpt']
     path_cond = p['path_cond']
@@ -66,7 +68,7 @@ def main():
     if p["vae_epochs"] and p["epochs"]:
         modeltype = f"INTRO{p['epochs']}_pre{p['vae_epochs']}-m{m_plus}-b1{beta1}b2{beta2}-w_rec{weight_rec}-w_neg{weight_neg}"
     elif p["epochs"]:
-        modeltype = f"INTRO{p['epochs']}-m{m_plus}-lr{lr_enc}b1{beta1}b2{beta2}-w_rec{weight_rec}-w_neg{weight_neg}"
+        modeltype = f"INTRO_{p['epochs']}-m{m_plus}-lr{lr_enc}b1{beta1}b2{beta2}-w_rec{weight_rec}-w_neg{weight_neg}"
     else:
         modeltype = f"VAE{p['vae_epochs']}-b1{beta1}b2{beta2}"
     txt_info   = f"txt:({txt_cond_type}-dense{cond_dim_txts}-rnn{rnn_dim}-emb{emb_dim})"  if txt_cond_type else ""

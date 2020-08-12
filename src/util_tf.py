@@ -76,7 +76,7 @@ class VariationalEncoding(tf.keras.layers.Layer):
 class ResBlock(tf.keras.layers.Layer):
     def __init__(self, nr_filters,
                  adjust_channels=False,
-                 normalizer=tf.keras.layers.BatchNormalization,
+                 normalizer=None,
                  activation=tf.keras.layers.LeakyReLU(alpha=0.2),
                  dropout_rate=0):
         super(ResBlock, self).__init__(name='ResBlock')
@@ -84,22 +84,25 @@ class ResBlock(tf.keras.layers.Layer):
 
         if adjust_channels: self.adjust = tf.keras.layers.Conv2D(nr_filters, kernel_size=1, padding="same", use_bias=False)
         else: self.adjust = None
-
         self.activation = activation
         self.conv1 = tf.keras.layers.Conv2D(nr_filters, kernel_size=3, padding="same", use_bias=False)
-        self.normalize1 = normalizer()
+
+        self.normalize1 = normalizer() if normalizer else None
+        self.normalize2 = normalizer() if normalizer else None
         self.conv2 = tf.keras.layers.Conv2D(nr_filters, kernel_size=3, padding="same", use_bias=False)
-        self.normalize2 = normalizer()
         self.dropout= tf.keras.layers.Dropout(dropout_rate)
 
     def call(self, inpt, training=False):
         with tf.name_scope("ResBlock") as scope:
             if self.adjust: inpt = self.adjust(inpt)
             x = self.conv1(inpt)
-            x = self.normalize1(x, training=training)
+            if self.normalize1:
+                x = self.normalize1(x, training=training)
             x = self.activation(x)
             x = self.conv2(x)
-            x = self.normalize2(x+inpt, training=training)
+            x = x+inpt
+            if self.normalize2:
+                x = self.normalize2(x, training=training)
             x = self.dropout(self.activation(x), training=training)
         return x
 

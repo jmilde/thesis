@@ -87,8 +87,8 @@ params = {
         "batch_size": 64,
         "logs_per_epoch": 100,  # log ~100x per epoch
         "fid_samples_nr": 50000,
-        'normalizer_enc': tf.keras.layers.BatchNormalization, # tfa.layers.InstanceNormalization,
-        'normalizer_dec': tf.keras.layers.BatchNormalization, # tfa.layers.GroupNormalization
+        'normalizer_enc': None, #None "instance" "batch" "group"
+        'normalizer_dec': None, #None "instance" "batch" "group"
 
         ### loss weights
         "weight_rec": 0.5, # beta: og:0.5, 0.01 - 100, larger β improves reconstruction quality but may influence sample diversity

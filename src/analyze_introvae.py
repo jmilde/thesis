@@ -26,42 +26,42 @@ def calculate_scores(model, data, writer, path_fid, path_inception, model_name,
         os.mkdir(path_fid_data)
     sample_nr = 0
     imgs= []
-    for _ in tqdm(range(math.ceil(fid_samples_nr//batch_size))):
+    for _ in tqdm(range(math.ceil(fid_samples_nr//batch_size+1))):
         inpt = next(data)
         output = model.train(*inpt)
-        imgs.extend(output["x_p"].numpy())
-        for img in output["x_p"]:
-            if sample_nr<=fid_samples_nr:
-                imsave(os.path.join(path_fid_data, f"{sample_nr}.png"), np.clip(img, 0, 255).astype("uint8"))
-                sample_nr += 1
-
-            else:
-                break
+        imgs_array = output["x_p"].numpy()
+        imgs.extend(imgs_array)
+        #for img in imgs_array:
+            #if sample_nr<=fid_samples_nr:
+                #imsave(os.path.join(path_fid_data,
+                                    #f"{sample_nr}.png"),
+                       #np.clip(img*255, a_min=0, a_max=255).astype("uint8"))
+                #sample_nr += 1
+                #
+            #else:
+                #break
 
     print("Calculate MS-SSIM Score")
-    imgs = np.array(imgs)[:-1] if len(imgs)%2 else np.array(imgs)
-    imgs = np.clip(imgs, 0, 255)
-    split_a = imgs[:len(imgs)//2]
-    split_b = imgs[len(imgs)//2:]
-
-
     with tf.device('/CPU:0'):
+        imgs = np.clip(np.array(imgs[:50000])*255, 0 , 255)
         x = []
-        for a,b in zip(np.array_split(split_a, 5), np.array_split(split_b, 5)):
+        for a,b in zip(np.array_split(imgs[:len(imgs)//2], 5),
+                       np.array_split(imgs[len(imgs)//2:], 5)):
             x.extend( tf.image.ssim_multiscale(a,
                                                b,
                                                255,
-                                                   filter_size=8))
+                                           filter_size=8))
         ms_ssim = tf.math.reduce_mean(x)
         print(f"MS_SSIM: {ms_ssim}")
+
         with writer.as_default():
             tf.summary.scalar("MS_SSIM_score" , ms_ssim , step=0)
             writer.flush()
 
         print("caluclate mean and var")
         calc_and_save_reference(path_fid_data,
-                                os.path.join(path_fid, f"{model_name}.npz"),
-                                inception_path=path_inception)
+                            os.path.join(path_fid, f"{model_name}.npz"),
+                            inception_path=path_inception)
 
         print("calculate FID Score")
         mu1= np.load(os.path.join(path_fid, f"{model_name}.npz"), allow_pickle=True)["mu"]

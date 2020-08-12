@@ -181,29 +181,35 @@ class Encoder(tf.keras.layers.Layer):
     def __init__(self,
                  channels,
                  latent_dim,
-                 normalizer=tf.keras.layers.BatchNormalization,
+                 normalizer=None,
                  name="Encoder",
                  dropout_rate=0,
                  **kwargs):
         super(Encoder, self).__init__(name=name, **kwargs)
 
-        self.layers = [tf.keras.layers.Conv2D(channels[0],
+        self.layers = []
+        self.layers.append(tf.keras.layers.Conv2D(channels[0],
                                          kernel_size=5,
                                          strides=1,
                                          padding="same",
-                                         use_bias=False),
-                       normalizer(),
-                       tf.keras.layers.LeakyReLU(0.2),
-                       tf.keras.layers.AveragePooling2D()]
+                                         use_bias=False),)
+        #if normalizer:
+        #    self.layers.append(normalizer())
+        self.layers.append( tf.keras.layers.BatchNormalization())
+        self.layers.append(tf.keras.layers.LeakyReLU(0.2))
+        self.layers.append(tf.keras.layers.AveragePooling2D())
 
         for i, channel in enumerate(channels[1:], 1):
             self.layers.append(ResBlock(channel,
                                         adjust_channels=channel!=channels[i-1],
+                                        normalizer=normalizer,
                                         dropout_rate=dropout_rate))
             self.layers.append(tf.keras.layers.AveragePooling2D())
 
         # additional res layer
-        self.layers.append(ResBlock(channels[-1], dropout_rate=dropout_rate))
+        self.layers.append(ResBlock(channels[-1],
+                                    normalizer=normalizer,
+                                    dropout_rate=dropout_rate))
 
         self.variational = VariationalEncoding(latent_dim)
 
@@ -229,7 +235,7 @@ class Decoder(tf.keras.layers.Layer):
                  color_onehot_dim,
                  color_cond_type="one_hot",
                  txt_cond_type="rnn",
-                 normalizer=tf.keras.layers.BatchNormalization,
+                 normalizer=None,
                  name="Decoder",
                  **kwargs):
         super(Decoder, self).__init__(name=name, **kwargs)
@@ -258,16 +264,19 @@ class Decoder(tf.keras.layers.Layer):
         self.dense_resize     = tf.keras.layers.Dense(xy_dim*xy_dim*channels[0],
                                                       name="dense_resize")
         self.layers = []
-        self.layers.append(ResBlock(channels[0]))
+        self.layers.append(ResBlock(channels[0],
+                           normalizer=normalizer))
         self.layers.append(tf.keras.layers.UpSampling2D(size=(2,2)))
 
         for i,channel in enumerate(channels[1:], 1):
             self.layers.append(ResBlock(channel,
-                                        adjust_channels= channel!=channels[i-1]))
+                                        adjust_channels= channel!=channels[i-1],
+                                        normalizer=normalizer))
             self.layers.append(tf.keras.layers.UpSampling2D(size=(2,2)))
 
         # additional res layer
-        self.layers.append(ResBlock(channels[-1]))
+        self.layers.append(ResBlock(channels[-1],
+                                    normalizer=normalizer))
 
         self.layers.append(tf.keras.layers.Conv2D(inpt_dim[-1], kernel_size=5,
                                                   strides=1, padding="same"))

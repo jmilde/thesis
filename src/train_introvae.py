@@ -45,8 +45,7 @@ def main():
     epochs = p['epochs']
     batch_size = p['batch_size']
     logs_per_epoch = p['logs_per_epoch']
-    normalizer_enc = p['normalizer_enc']
-    normalizer_dec = p['normalizer_dec']
+
     weight_rec = p['weight_rec']
     weight_kl = p['weight_kl']
     weight_neg = p['weight_neg']
@@ -64,11 +63,27 @@ def main():
     fid_samples_nr = p["fid_samples_nr"]
     color_cond_dim = len(np.load(path_cond, allow_pickle=True)["colors_old" if color_cond_type=="one_hot" else "colors"][1])
 
+    if not p["normalizer_enc"]:
+        norm = "_NOBN"
+        normalizer_enc = None
+        normalizer_dec = None
+    elif p["normalizer_enc"]== "instance":
+        norm = ""#"_INST"
+        normalizer_enc = tfa.layers.InstanceNormalization
+        normalizer_dec = tfa.layers.InstanceNormalization
+    elif p["normalizer_enc"]== "group":
+        norm = "_GRP"
+        normalizer_enc = tfa.layers.GroupNormalization
+        normalizer_dec = tfa.layers.GroupNormalization
+    elif p["normalizer_enc"]== "batch":
+        norm = "_BATCH"
+        normalizer_enc = tf.keras.layers.BatchNormalization
+        normalizer_dec = tf.keras.layers.BatchNormalization
 
     if p["vae_epochs"] and p["epochs"]:
-        modeltype = f"INTRO{p['epochs']}_pre{p['vae_epochs']}-m{m_plus}-b1{beta1}b2{beta2}-w_rec{weight_rec}-w_neg{weight_neg}"
+        modeltype = f"INTRO{norm}_{p['epochs']}_pre{p['vae_epochs']}-m{m_plus}-b1{beta1}b2{beta2}-w_rec{weight_rec}-w_neg{weight_neg}"
     elif p["epochs"]:
-        modeltype = f"INTRO_{p['epochs']}-m{m_plus}-lr{lr_enc}b1{beta1}b2{beta2}-w_rec{weight_rec}-w_neg{weight_neg}"
+        modeltype = f"INTRO{norm}_{p['epochs']}-m{m_plus}-lr{lr_enc}b1{beta1}b2{beta2}-w_rec{weight_rec}-w_neg{weight_neg}"
     else:
         modeltype = f"VAE{p['vae_epochs']}-b1{beta1}b2{beta2}"
     txt_info   = f"txt:({txt_cond_type}-dense{cond_dim_txts}-rnn{rnn_dim}-emb{emb_dim})"  if txt_cond_type else ""
@@ -108,8 +123,8 @@ def main():
                      txt_cond_type,
                      dropout_conditionals=dropout_conditionals,
                      dropout_encoder_resblock=dropout_encoder_resblock,
-                     normalizer_enc = tf.keras.layers.BatchNormalization,
-                     normalizer_dec = tf.keras.layers.BatchNormalization,
+                     normalizer_enc = normalizer_enc,
+                     normalizer_dec = normalizer_dec,
                      weight_rec=weight_rec,
                      weight_kl=weight_kl,
                      weight_neg = weight_neg,
@@ -138,11 +153,12 @@ def main():
         ckpt.restore(manager.latest_checkpoint)
         print("\nmodel restored\n")
 
+
     # for logging
     example_data=next(data)
 
     if vae_epochs:
-        manager = tf.train.CheckpointManager(ckpt, path_ckpt, max_to_keep=3, checkpoint_name=model_name + "_VAEpretrain")
+        manager = tf.train.CheckpointManager(ckpt, path_ckpt, max_to_keep=10, checkpoint_name=model_name + "_VAEpretrain")
         step=0
         for _ in trange(vae_epochs, desc="epochs", position=0):
             for _ in trange(ds_size//batch_size, desc="steps in epochs", position=1, leave=False):
@@ -179,7 +195,7 @@ def main():
 
 
     # manager for intravae training
-    manager = tf.train.CheckpointManager(ckpt, path_ckpt, max_to_keep=3, checkpoint_name=model_name)
+    manager = tf.train.CheckpointManager(ckpt, path_ckpt, max_to_keep=10, checkpoint_name=model_name)
 
 
 

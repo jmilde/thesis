@@ -193,9 +193,8 @@ class Encoder(tf.keras.layers.Layer):
                                          strides=1,
                                          padding="same",
                                          use_bias=False),)
-        #if normalizer:
-        #    self.layers.append(normalizer())
-        self.layers.append( tf.keras.layers.BatchNormalization())
+        if normalizer:
+            self.layers.append(normalizer())
         self.layers.append(tf.keras.layers.LeakyReLU(0.2))
         self.layers.append(tf.keras.layers.AveragePooling2D())
 

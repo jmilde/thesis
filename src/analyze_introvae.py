@@ -31,15 +31,15 @@ def calculate_scores(model, data, writer, path_fid, path_inception, model_name,
         output = model.train(*inpt)
         imgs_array = output["x_p"].numpy()
         imgs.extend(imgs_array)
-        #for img in imgs_array:
-            #if sample_nr<=fid_samples_nr:
-                #imsave(os.path.join(path_fid_data,
-                                    #f"{sample_nr}.png"),
-                       #np.clip(img*255, a_min=0, a_max=255).astype("uint8"))
-                #sample_nr += 1
-                #
-            #else:
-                #break
+        for img in imgs_array:
+            if sample_nr<=fid_samples_nr:
+                imsave(os.path.join(path_fid_data,
+                                    f"{sample_nr}.png"),
+                       np.clip(img*255, a_min=0, a_max=255).astype("uint8"))
+                sample_nr += 1
+
+            else:
+                break
 
     print("Calculate MS-SSIM Score")
     with tf.device('/CPU:0'):

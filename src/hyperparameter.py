@@ -91,7 +91,7 @@ params = {
         'normalizer_dec': None, #None "instance" "batch" "group"
 
         ### loss weights
-        "weight_rec": 0.5, # beta: og:0.5, 0.01 - 100, larger β improves reconstruction quality but may influence sample diversity
+        "weight_rec": 0.25, # beta: og:0.5, 0.01 - 100, larger β improves reconstruction quality but may influence sample diversity
         "weight_kl": 1,
         "weight_neg": 0.25, # alpha: og:0.25, 0.1-0.5
         "m_plus": 110, #og:110, #250 should be selected according to the value of β, to balance advaserial loss

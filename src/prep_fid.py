@@ -20,7 +20,7 @@ def calc_and_save_reference(data_path, output_path, inception_path=None):
     # just set it to None and the script will later download the files for you
     print("check for inception model..", end="\n", flush=True)
     inception_path = fid.check_or_download_inception(inception_path) # download inception if necessary
-    print("ok")
+    print("model ok")
 
     # loads all images into memory (this might require a lot of RAM!)
     print("load images..", end=" " , flush=True)

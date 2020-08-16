@@ -50,8 +50,8 @@ def calculate_scores(model, data, writer, path_fid, path_inception, model_name,
             x.extend( tf.image.ssim_multiscale(a,
                                                b,
                                                255,
-                                           filter_size=8))
-        ms_ssim = tf.math.reduce_mean(x)
+                                               filter_size=8))
+            ms_ssim = tf.math.reduce_mean(x)
         print(f"MS_SSIM: {ms_ssim}")
 
         with writer.as_default():

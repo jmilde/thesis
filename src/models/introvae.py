@@ -203,6 +203,7 @@ class Encoder(tf.keras.layers.Layer):
                                         adjust_channels=channel!=channels[i-1],
                                         normalizer=normalizer,
                                         dropout_rate=dropout_rate))
+            self.layers.append(tf.keras.layers.BatchNormalization())
             self.layers.append(tf.keras.layers.AveragePooling2D())
 
         # additional res layer

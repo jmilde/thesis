@@ -64,7 +64,7 @@ def main():
     color_cond_dim = len(np.load(path_cond, allow_pickle=True)["colors_old" if color_cond_type=="one_hot" else "colors"][1])
 
     if not p["normalizer_enc"]:
-        norm = "_NONE"
+        norm = "_ONE"
         normalizer_enc = None
         normalizer_dec = None
     elif p["normalizer_enc"]== "instance":
@@ -151,7 +151,7 @@ def main():
     if restore_model:
         manager = tf.train.CheckpointManager(ckpt, path_ckpt, checkpoint_name=model_name, max_to_keep=10)
         ckpt.restore(manager.latest_checkpoint)
-        print("\nmodel restored\n")
+        print(f"\nmodel: {model_name} restored\n")
 
 
     # for logging

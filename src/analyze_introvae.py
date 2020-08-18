@@ -51,7 +51,7 @@ def calculate_scores(model, data, writer, path_fid, path_inception, model_name,
                                                b,
                                                255,
                                                filter_size=8))
-            ms_ssim = tf.math.reduce_mean(x)
+        ms_ssim = tf.math.reduce_mean(x)
         print(f"MS_SSIM: {ms_ssim}")
 
         with writer.as_default():

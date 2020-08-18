@@ -64,7 +64,7 @@ def main():
     color_cond_dim = len(np.load(path_cond, allow_pickle=True)["colors_old" if color_cond_type=="one_hot" else "colors"][1])
 
     if not p["normalizer_enc"]:
-        norm = "_ONE"
+        norm = "_NONE"
         normalizer_enc = None
         normalizer_dec = None
     elif p["normalizer_enc"]== "instance":

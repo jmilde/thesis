@@ -285,7 +285,7 @@ class Decoder(tf.keras.layers.Layer):
         #    color = self.color_emb(color)
         if self.color_cond_type: # if continous embedding or one hot then this layer is added
             cond_color = self.dropout_color(self.noise_color(self.relu(self.dense_cond_color(color)), training), training)
-        if self.txt_cond_type=="one_hot":
+        if self.txt_cond_type=="rnn":
             txt = self.RNN(txt)
         if self.txt_cond_type:
             cond_txts  = self.dropout_txt(self.noise_txt(self.relu(self.dense_cond_txt(txt)),training),training)

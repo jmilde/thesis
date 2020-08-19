@@ -17,28 +17,34 @@ from src.hyperparameter import params
 
 def main():
     p = params["train"]
+    SEED= 27
+
 
     gpus = tf.config.experimental.list_physical_devices('GPU')
+    print(f"Available gpus: {gpus}")
     if gpus:
         if len(gpus)>=p["gpu"]:
             tf.config.experimental.set_visible_devices(gpus[p["gpu"]], 'GPU')
             tf.config.experimental.set_memory_growth(gpus[p["gpu"]], True)
 
+    os.environ['PYTHONHASHSEED']=str(SEED)
+    np.random.seed(SEED)
+    tf.random.set_seed(SEED)
 
-    path_ckpt = p['path_ckpt']
-    path_cond = p['path_cond']
-    path_data = p['path_data']
-    path_log = p['path_log']
-    path_spm = p['path_spm']
-    path_fid = p["path_fid"]
-    restore_model = p['restore_model']
-    img_dim = p['img_dim']
-    btlnk = p['btlnk']
-    channels = p['channels']
+    path_ckpt      = p['path_ckpt']
+    path_cond      = p['path_cond']
+    path_data      = p['path_data']
+    path_log       = p['path_log']
+    path_spm       = p['path_spm']
+    path_fid       = p["path_fid"]
+    restore_model  = p['restore_model']
+    img_dim        = p['img_dim']
+    btlnk          = p['btlnk']
+    channels       = p['channels']
     cond_dim_color = p['cond_dim_color']
-    rnn_dim = p['rnn_dim']
-    cond_dim_txts = p['cond_dim_txts']
-    emb_dim = p['emb_dim']
+    rnn_dim        = p['rnn_dim']
+    cond_dim_txts  = p['cond_dim_txts']
+    emb_dim        = p['emb_dim']
     dropout_conditionals = p['dropout_conditionals']
     dropout_encoder_resblock = p['dropout_encoder_resblock']
     vae_epochs = p['vae_epochs']
@@ -79,6 +85,10 @@ def main():
         norm = "_BATCH"
         normalizer_enc = tf.keras.layers.BatchNormalization
         normalizer_dec = tf.keras.layers.BatchNormalization
+    elif p["normalizer_enc"]== "layer":
+        norm = "_LAYER"
+        normalizer_enc = tf.keras.layers.LayerNormalization
+        normalizer_dec = tf.keras.layers.LayerNormalization
 
     if p["vae_epochs"] and p["epochs"]:
         modeltype = f"INTRO{norm}_{p['epochs']}_pre{p['vae_epochs']}-m{m_plus}-b1{beta1}b2{beta2}-w_rec{weight_rec}-w_neg{weight_neg}"

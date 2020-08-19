@@ -6,7 +6,7 @@ from src.util_io import pform
 from src.util_np import np, vpack
 from src.util_sp import load_spm
 from src.util_tf import batch_cond_spm, pipe, spread_image
-from tqdm import trange,tqdm
+from tqdm import trange, tqdm
 import h5py
 import os
 import tensorflow as tf
@@ -16,6 +16,7 @@ from src.fid import calculate_frechet_distance
 from src.prep_fid import calc_and_save_reference
 from skimage.io import imsave
 import math
+
 
 
 def calculate_scores(model, data, writer, path_fid, path_inception, model_name,
@@ -108,18 +109,27 @@ def run_tests(model, writer, img_embs, colors, txts, spm, btlnk, img_dim,
 
             # text exploration
             if model.txt_cond_type:
+                txt_samples = ["firma name", "G", "A",  "kaltes bier", "vogel", "bird", "pelikan", "imperceptron", "albatros coding", "tree leaves", "nice coffee", "german engineering", "abcdef ghij", "klmnopq", "rstu vwxyz", "0123456789"]
                 _, x, _ = model.encode(np.repeat(img_emb[np.newaxis, :], batch_size, axis=0))
                 cond_color= None
                 if model.color_cond_type:
                     cond_color = np.repeat(color[np.newaxis, :], batch_size, axis=0)
-                t = [spm.encode_as_ids(t) for t in ["firma 1", "hallo", "was geht ab",  "kaltes bier", "vogel", "bird", "pelikan", "imperceptron", "albatros coding", "tree leaves", "nice coffee", "german engineering", "abcdef ghij", "klmnopq", "rstu vwxyz", "0123456789"]]
-                cond_txt   = vpack(t, (batch_size, max(map(len,t))), fill=1,  dtype="int64")
-                x_txt.extend(model.decode(x, cond_color, cond_txt))
+                if model.txt_cond_type=="rnn":
+                    t = [spm.encode_as_ids(t) for t in txt_samples]
+                    cond_txt = vpack(t, (batch_size, max(map(len,t))), fill=1,  dtype="int64")
+
+                elif model.txt_cond_type=="bert":
+                    cond_txt = np.load(os.path.expanduser("~/data/txt.npz"), allow_pickle=True)["txts"]
+
+
+                x_txt.extend(model.decode(x, color=cond_color, txt=cond_txt))
 
             if model.color_cond_type:
                 # color exploration
                 if model.color_cond_type=="one_hot":
                     cond_color = []
+                    #{'green':0,'purple':1,'black':2,'brown':3,'blue':4,'cyan':5,'yellow':6,
+                    #'gray':7,'red':8,'pink':9,'orange':10,
                     for i in range(11):
                         zeros = np.zeros(11)
                         zeros[i]=1

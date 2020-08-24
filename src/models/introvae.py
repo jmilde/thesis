@@ -255,6 +255,8 @@ class Decoder(tf.keras.layers.Layer):
         if txt_cond_type:
             self.dense_cond_txt   = tf.keras.layers.Dense(cond_dim_txts,
                                                           name="dense_cond_txt")
+            #self.dense_cond_txt2   = tf.keras.layers.Dense(cond_dim_txts,
+            #                                              name="dense_cond_txt2")
             self.dropout_txt      = tf.keras.layers.Dropout(dropout_conditionals)
             self.noise_txt        = tf.keras.layers.GaussianNoise(noise_txt)
         if txt_cond_type=="rnn":
@@ -288,6 +290,7 @@ class Decoder(tf.keras.layers.Layer):
         if self.txt_cond_type=="rnn":
             txt = self.RNN(txt)
         if self.txt_cond_type:
+            #txt = self.relu(self.dense_cond_txt2(txt))
             cond_txts  = self.dropout_txt(self.noise_txt(self.relu(self.dense_cond_txt(txt)),training),training)
 
         if self.txt_cond_type and self.color_cond_type:

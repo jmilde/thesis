@@ -82,7 +82,7 @@ def main():
         normalizer_enc = tfa.layers.GroupNormalization
         normalizer_dec = tfa.layers.GroupNormalization
     elif p["normalizer_enc"]== "batch":
-        norm = "_BATCH"
+        norm = "_BATCH_"
         normalizer_enc = tf.keras.layers.BatchNormalization
         normalizer_dec = tf.keras.layers.BatchNormalization
     elif p["normalizer_enc"]== "layer":
@@ -93,7 +93,7 @@ def main():
     if p["vae_epochs"] and p["epochs"]:
         modeltype = f"INTRO{norm}_{p['epochs']}_pre{p['vae_epochs']}-m{m_plus}-b1{beta1}b2{beta2}-w_rec{weight_rec}-w_neg{weight_neg}"
     elif p["epochs"]:
-        modeltype = f"INTRO{norm}_{p['epochs']}-m{m_plus}-lr{lr_enc}b1{beta1}b2{beta2}-w_rec{weight_rec}-w_neg{weight_neg}"
+        modeltype = f"INTRO_only_{norm}_{p['epochs']}-m{m_plus}-lr{lr_enc}b1{beta1}b2{beta2}-w_rec{weight_rec}-w_neg{weight_neg}"
     else:
         modeltype = f"VAE{p['vae_epochs']}-b1{beta1}b2{beta2}"
     txt_info   = f"txt:({txt_cond_type}-dense{cond_dim_txts}-rnn{rnn_dim}-emb{emb_dim})"  if txt_cond_type else ""

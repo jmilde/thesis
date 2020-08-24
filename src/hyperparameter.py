@@ -46,22 +46,32 @@ params = {
         "beta1": 0.9},
 
     "train":{
+        #"path_ckpt": expanduser('~/data/models/'),
+        #"path_cond": expanduser('~/data/eudata_conditionals.npz'),
+        #"path_data": expanduser('~/data/imgs'),
+        #"path_log": expanduser("~/cache/tensorboard-logdir/"),
+        #"path_spm": expanduser("~/data/logo_vocab"),
+        #"path_fid": expanduser("~/data/fid/"),
+        #"path_inception": expanduser("~/data/"),
+
+
         "path_ckpt": expanduser('~/data/models/'),
-        "path_cond": expanduser('~/data/eudata_conditionals.npz'),
-        "path_data": expanduser('~/data/imgs'),
+        "path_cond": expanduser('~/data/onlylogo_conditionals.npz'),
+        "path_data": expanduser('~/data/only_logo'),
         "path_log": expanduser("~/cache/tensorboard-logdir/"),
         "path_spm": expanduser("~/data/logo_vocab"),
         "path_fid": expanduser("~/data/fid/"),
         "path_inception": expanduser("~/data/"),
 
-        #"path_ckpt": expanduser('~/'),
-        #"path_cond": expanduser('~/eudata_conditionals.npz'),
-        #"path_data": expanduser('~/imgs'),
-        #"path_log": expanduser("~/"),
-        #"path_spm": expanduser("~/logo_vocab"),
-        #"path_fid": expanduser("~/fid/"),
-        #"path_inception": expanduser("~/"),
-        "gpu": 0,
+        #"path_ckpt": expanduser('~/data/models/'),
+        #"path_cond": expanduser('~/data/lldboosted_conditionals.npz'),
+        #"path_data": expanduser('~/data/lld_boosted'),
+        #"path_log": expanduser("~/cache/tensorboard-logdir/"),
+        #"path_spm": expanduser("~/data/logo_vocab"),
+        #"path_fid": expanduser("~/data/fid/"),
+        #"path_inception": expanduser("~/data/"),
+
+        "gpu": 3,
         "restore_model":False, #empty or modelname for model stored at path_ckpt
         "color_cond_type": None, #"one_hot", # "continuous"
         "txt_cond_type": None, #"rnn" #"bert"
@@ -87,8 +97,8 @@ params = {
         "batch_size": 64,
         "logs_per_epoch": 100,  # log ~100x per epoch
         "fid_samples_nr": 50000,
-        'normalizer_enc': None, #None "instance" "batch" "group"
-        'normalizer_dec': None, #None "instance" "batch" "group"
+        'normalizer_enc': "batch", #None "instance" "batch" "group"
+        'normalizer_dec': "batch", #None "instance" "batch" "group"
 
         ### loss weights
         "weight_rec": 0.25, # beta: og:0.5, 0.01 - 100, larger β improves reconstruction quality but may influence sample diversity

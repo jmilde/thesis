@@ -279,7 +279,7 @@ def main(path_data, path_data_lld, path_data_metu, path_lbls_metu, resize_size, 
     np.savez_compressed(os.path.join(path_out, f"eudata_conditionals.npz"),
                         colors=colors,
                         txts=txts,
-                        tct_embs = txt_embs
+                        txt_embs = txt_embs
                         colors_old=np.array(colors_old))
     print(f"Done: saved all images in {path_out}imgs/ and the conditionals as eudata_conditionals.npz")
 

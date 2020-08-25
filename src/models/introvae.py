@@ -4,9 +4,8 @@ from src.util_tf import ResBlock, VariationalEncoding, downsampling_res_block, u
 
 class INTROVAE(tf.keras.Model):
     def __init__(self, inpt_dim, channels, btlnk, batch_size, cond_dim_colors,
-                 rnn_dim, cond_dim_txts, vocab_dim, emb_dim, color_cond_dim,
-                 color_cond_type,
-                 txt_cond_type,
+                 rnn_dim, cond_dim_txts, cond_dim_clusters, vocab_dim, emb_dim, color_cond_dim,
+                 color_cond_type, txt_cond_type, cluster_cond_type,
                  normalizer_enc           = tf.keras.layers.BatchNormalization,
                  normalizer_dec           = tf.keras.layers.BatchNormalization,
                  weight_rec               = 1,
@@ -26,31 +25,33 @@ class INTROVAE(tf.keras.Model):
                  **kwargs):
         super(INTROVAE, self).__init__(name=name, **kwargs)
 
-        self.color_cond_type = color_cond_type
-        self.txt_cond_type   = txt_cond_type
-        self.inpt_dim        = inpt_dim
-        self.btlnk           = btlnk
-        self.batch_size      = batch_size
-        self.weight_rec      = weight_rec
-        self.weight_kl       = weight_kl
-        self.weight_neg      = weight_neg
-        self.m_plus          = m_plus
+        self.color_cond_type     = color_cond_type
+        self.txt_cond_type       = txt_cond_type
+        self.cluster_cond_type   = cluster_cond_type
+        self.inpt_dim            = inpt_dim
+        self.btlnk               = btlnk
+        self.batch_size          = batch_size
+        self.weight_rec          = weight_rec
+        self.weight_kl           = weight_kl
+        self.weight_neg          = weight_neg
+        self.m_plus              = m_plus
 
         # encoding
-        self.inpt_layer       = tf.keras.layers.InputLayer(inpt_dim)
-        self.inpt_layer_cond  = tf.keras.layers.InputLayer(input_shape=(None,None))
-        self.inpt_layer_txt   = tf.keras.layers.InputLayer(input_shape=(None,None))
-        self.encoder          = Encoder(channels, btlnk, normalizer=normalizer_enc,
+        self.inpt_layer          = tf.keras.layers.InputLayer(inpt_dim)
+        self.inpt_layer_color    = tf.keras.layers.InputLayer(input_shape=(None,None))
+        self.inpt_layer_cluster  = tf.keras.layers.InputLayer(input_shape=(None,None))
+        self.inpt_layer_txt      = tf.keras.layers.InputLayer(input_shape=(None,None))
+        self.encoder             = Encoder(channels, btlnk, normalizer=normalizer_enc,
                                         dropout_rate=dropout_encoder_resblock)
-        self.noise_img        = tf.keras.layers.GaussianNoise(noise_img)
+        self.noise_img           = tf.keras.layers.GaussianNoise(noise_img)
 
         # decoding
         self.decoder= Decoder(inpt_dim, channels[::-1], rnn_dim,
                               vocab_dim, emb_dim, cond_dim_colors,
-                              cond_dim_txts, dropout_conditionals,
+                              cond_dim_txts, cond_dim_clusters, dropout_conditionals,
                               noise_color, noise_txt, color_cond_dim,
                               normalizer=normalizer_dec, color_cond_type=color_cond_type,
-                              txt_cond_type=txt_cond_type)
+                              txt_cond_type=txt_cond_type, cluster_cond_type=cluster_cond_type)
 
         self.relu = tf.keras.layers.ReLU()
         # optimizers
@@ -61,8 +62,8 @@ class INTROVAE(tf.keras.Model):
         z, mu, lv = self.encoder(x, training=training)
         return z, mu, lv
 
-    def decode(self, z, color=None, txt=None, training=False):
-        return self.decoder(z, color=color, txt=txt, training=training)
+    def decode(self, z, color=None, txt=None, cluster=None, training=False):
+        return self.decoder(z, color=color, txt=txt, cluster=cluster, training=training)
 
     def kl_loss(self, mu, lv):
         return tf.reduce_mean(-0.5 * tf.reduce_sum((-1*(tf.square(-mu)+tf.exp(lv))+1+lv),-1))+0.0
@@ -108,18 +109,21 @@ class INTROVAE(tf.keras.Model):
         return output
 
 
-    def call(self, x, colors, txts, training=True):
+    def call(self, x, colors, txts, clusters, training=True):
         # inpts
         x         = self.inpt_layer(x)
         z_p       = tf.random.normal((self.batch_size, self.btlnk), 0, 1)
 
         x_txt     = self.inpt_layer_txt(txts) if self.txt_cond_type else None
-        x_color   = self.inpt_layer_cond(colors) if self.color_cond_type else None
+        x_color   = self.inpt_layer_color(colors) if self.color_cond_type else None
+        x_cluster   = self.inpt_layer_cluster(clusters) if self.cluster_cond_type else None
+
+
         #########
 
         z, mu, lv = self.encode(x, training=training)  # encode real image
-        x_r       = self.decode(z, x_color, x_txt, training=training)  # reconstruct real image
-        x_p       = self.decode(z_p, x_color, x_txt, training=training) # generate fake from z_p
+        x_r       = self.decode(z, x_color, x_txt, x_cluster, training=training)  # reconstruct real image
+        x_p       = self.decode(z_p, x_color, x_txt, x_cluster, training=training) # generate fake from z_p
 
         # reconstruction loss
         loss_rec =  self.mse_loss(x, x_r)* self.weight_rec
@@ -165,9 +169,9 @@ class INTROVAE(tf.keras.Model):
 
 
     @tf.function(experimental_relax_shapes=True)
-    def train(self, x, colors, txts,):
+    def train(self, x, colors, txts, clusters):
         with tf.GradientTape() as e_tape, tf.GradientTape() as d_tape:
-            output = self.call(x, colors, txts, training = True)
+            output = self.call(x, colors, txts, clusters, training = True)
             e_loss = output["loss_enc"] # encoder
             d_loss = output["loss_dec"] # decoder
         self.optimizer_enc.apply_gradients(zip(e_tape.gradient(e_loss, self.encoder.trainable_variables), self.encoder.trainable_variables))
@@ -228,12 +232,14 @@ class Decoder(tf.keras.layers.Layer):
                  emb_dim,
                  cond_dim_colors,
                  cond_dim_txts,
+                 cond_dim_clusters,
                  dropout_conditionals,
                  noise_color,
                  noise_txt,
                  color_onehot_dim,
-                 color_cond_type="one_hot",
-                 txt_cond_type="rnn",
+                 color_cond_type=None,
+                 txt_cond_type=None,
+                 cluster_cond_type=None,
                  normalizer=None,
                  name="Decoder",
                  **kwargs):
@@ -242,6 +248,7 @@ class Decoder(tf.keras.layers.Layer):
         self.relu = tf.keras.layers.ReLU()
         self.color_cond_type = color_cond_type
         self.txt_cond_type = txt_cond_type
+        self.cluster_cond_type = cluster_cond_type
         xy_dim = inpt_dim[1]/(2**len(channels)) #wh
         self.dec_reshape_dim = (-1, int(xy_dim), int(xy_dim), channels[0])
 
@@ -261,6 +268,10 @@ class Decoder(tf.keras.layers.Layer):
             self.noise_txt        = tf.keras.layers.GaussianNoise(noise_txt)
         if txt_cond_type=="rnn":
             self.RNN              = GRU_bidirectional(rnn_dim, vocab_dim, emb_dim)
+
+        if cluster_cond_type:
+            self.dense_cond_cluster = tf.keras.layers.Dense(cond_dim_clusters,
+                                                            name="dense_cond_cluster")
 
         self.dense_resize     = tf.keras.layers.Dense(xy_dim*xy_dim*channels[0],
                                                       name="dense_resize")
@@ -282,7 +293,7 @@ class Decoder(tf.keras.layers.Layer):
         self.layers.append(tf.keras.layers.Conv2D(inpt_dim[-1], kernel_size=5,
                                                   strides=1, padding="same"))
 
-    def call(self, z, color=None, txt=None, training=False):
+    def call(self, z, color=None, txt=None, cluster=None, training=False):
         #if self.color_cond_type=="one_hot":
         #    color = self.color_emb(color)
         if self.color_cond_type: # if continous embedding or one hot then this layer is added
@@ -292,13 +303,24 @@ class Decoder(tf.keras.layers.Layer):
         if self.txt_cond_type:
             #txt = self.relu(self.dense_cond_txt2(txt))
             cond_txts  = self.dropout_txt(self.noise_txt(self.relu(self.dense_cond_txt(txt)),training),training)
+        if self.cluster_cond_type:
+            cond_clusters = self.relu(self.dense_cond_cluster(cluster))
 
         if self.txt_cond_type and self.color_cond_type:
+            z = tf.concat([z, cond_color, cond_txts, cond_clusters], 1)
+        elif self.txt_cond_type and self.color_cond_type:
             z = tf.concat([z, cond_color, cond_txts], 1)
+        elif self.txt_cond_type and self.cluster_cond_type:
+            z = tf.concat([z, cond_clusters, cond_txts], 1)
+        elif self.cluster_cond_type and self.color_cond_type:
+            z = tf.concat([z, cond_color, cond_clusters], 1)
         elif self.txt_cond_type:
             z = tf.concat([z, cond_txts], 1)
         elif self.color_cond_type:
             z = tf.concat([z, cond_color], 1)
+        elif self.cluster_cond_type:
+            z = tf.concat([z, cond_clusters], 1)
+
 
         x = self.relu(self.dense_resize(z))
         x = tf.reshape(x, self.dec_reshape_dim)

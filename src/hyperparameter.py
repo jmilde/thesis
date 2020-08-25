@@ -55,26 +55,27 @@ params = {
         #"path_inception": expanduser("~/data/"),
 
 
-        "path_ckpt": expanduser('~/data/models/'),
-        "path_cond": expanduser('~/data/onlylogo_conditionals.npz'),
-        "path_data": expanduser('~/data/only_logo'),
-        "path_log": expanduser("~/cache/tensorboard-logdir/"),
-        "path_spm": expanduser("~/data/logo_vocab"),
-        "path_fid": expanduser("~/data/fid/"),
-        "path_inception": expanduser("~/data/"),
-
         #"path_ckpt": expanduser('~/data/models/'),
-        #"path_cond": expanduser('~/data/lldboosted_conditionals.npz'),
-        #"path_data": expanduser('~/data/lld_boosted'),
+        #"path_cond": expanduser('~/data/onlylogo_conditionals.npz'),
+        #"path_data": expanduser('~/data/only_logo'),
         #"path_log": expanduser("~/cache/tensorboard-logdir/"),
         #"path_spm": expanduser("~/data/logo_vocab"),
         #"path_fid": expanduser("~/data/fid/"),
         #"path_inception": expanduser("~/data/"),
 
-        "gpu": 3,
+        "path_ckpt": expanduser('~/data/models/'),
+        "path_cond": expanduser('~/data/lldboosted_conditionals.npz'),
+        "path_data": expanduser('~/data/lld_boosted'),
+        "path_log": expanduser("~/cache/tensorboard-logdir/"),
+        "path_spm": expanduser("~/data/logo_vocab"),
+        "path_fid": expanduser("~/data/fid/"),
+        "path_inception": expanduser("~/data/"),
+
+        "gpu": 0,
         "restore_model":False, #empty or modelname for model stored at path_ckpt
         "color_cond_type": None, #"one_hot", # "continuous"
         "txt_cond_type": None, #"rnn" #"bert"
+        "cluster_cond_type": "vgg", #"vgg"
         "normalize": True,
 
         # parameters
@@ -84,6 +85,7 @@ params = {
         "cond_dim_color": 128, #64 #512
         "rnn_dim": 128, # output= dimx2 because of bidirectional concat
         "cond_dim_txts": 256,
+        "cond_dim_clusters": 128,
         "emb_dim": 128,
         "dropout_conditionals":0,
         "dropout_encoder_resblock":0,
@@ -93,7 +95,7 @@ params = {
 
         # training
         "vae_epochs": 0, # pretrain only vae
-        "epochs": 20,
+        "epochs": 276, #lld:276, all:20, only:115
         "batch_size": 64,
         "logs_per_epoch": 100,  # log ~100x per epoch
         "fid_samples_nr": 50000,

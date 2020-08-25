@@ -31,43 +31,44 @@ def main():
     np.random.seed(SEED)
     tf.random.set_seed(SEED)
 
-    path_ckpt      = p['path_ckpt']
-    path_cond      = p['path_cond']
-    path_data      = p['path_data']
-    path_log       = p['path_log']
-    path_spm       = p['path_spm']
-    path_fid       = p["path_fid"]
-    restore_model  = p['restore_model']
-    img_dim        = p['img_dim']
-    btlnk          = p['btlnk']
-    channels       = p['channels']
-    cond_dim_color = p['cond_dim_color']
-    rnn_dim        = p['rnn_dim']
-    cond_dim_txts  = p['cond_dim_txts']
-    emb_dim        = p['emb_dim']
-    dropout_conditionals = p['dropout_conditionals']
+    path_ckpt                = p['path_ckpt']
+    path_cond                = p['path_cond']
+    path_data                = p['path_data']
+    path_log                 = p['path_log']
+    path_spm                 = p['path_spm']
+    path_fid                 = p["path_fid"]
+    restore_model            = p['restore_model']
+    img_dim                  = p['img_dim']
+    btlnk                    = p['btlnk']
+    channels                 = p['channels']
+    cond_dim_color           = p['cond_dim_color']
+    rnn_dim                  = p['rnn_dim']
+    cond_dim_txts            = p['cond_dim_txts']
+    cond_dim_clusters        = p['cond_dim_clusters']
+    emb_dim                  = p['emb_dim']
+    dropout_conditionals     = p['dropout_conditionals']
     dropout_encoder_resblock = p['dropout_encoder_resblock']
-    vae_epochs = p['vae_epochs']
-    epochs = p['epochs']
-    batch_size = p['batch_size']
-    logs_per_epoch = p['logs_per_epoch']
-
-    weight_rec = p['weight_rec']
-    weight_kl = p['weight_kl']
-    weight_neg = p['weight_neg']
-    m_plus = p['m_plus']
-    lr_enc = p['lr_enc']
-    lr_dec = p['lr_dec']
-    beta1 = p['beta1']
-    beta2 = p['beta2']
-    noise_color = p['noise_color']
-    noise_txt = p['noise_txt']
-    noise_img = p['noise_img']
-    ds_size = len(np.load(path_cond, allow_pickle=True)["colors"])
-    color_cond_type = p['color_cond_type']
-    txt_cond_type = p['txt_cond_type']
-    fid_samples_nr = p["fid_samples_nr"]
-    color_cond_dim = len(np.load(path_cond, allow_pickle=True)["colors_old" if color_cond_type=="one_hot" else "colors"][1])
+    vae_epochs               = p['vae_epochs']
+    epochs                   = p['epochs']
+    batch_size               = p['batch_size']
+    logs_per_epoch           = p['logs_per_epoch']
+    weight_rec               = p['weight_rec']
+    weight_kl                = p['weight_kl']
+    weight_neg               = p['weight_neg']
+    m_plus                   = p['m_plus']
+    lr_enc                   = p['lr_enc']
+    lr_dec                   = p['lr_dec']
+    beta1                    = p['beta1']
+    beta2                    = p['beta2']
+    noise_color              = p['noise_color']
+    noise_txt                = p['noise_txt']
+    noise_img                = p['noise_img']
+    ds_size                  = len(np.load(path_cond, allow_pickle=True)["colors"])
+    color_cond_type          = p['color_cond_type']
+    cluster_cond_type        = p['cluster_cond_type']
+    txt_cond_type            = p['txt_cond_type']
+    fid_samples_nr           = p["fid_samples_nr"]
+    color_cond_dim           = len(np.load(path_cond, allow_pickle=True)["colors_old" if color_cond_type=="one_hot" else "colors"][1])
 
     if not p["normalizer_enc"]:
         norm = "_NONE"
@@ -93,14 +94,16 @@ def main():
     if p["vae_epochs"] and p["epochs"]:
         modeltype = f"INTRO{norm}_{p['epochs']}_pre{p['vae_epochs']}-m{m_plus}-b1{beta1}b2{beta2}-w_rec{weight_rec}-w_neg{weight_neg}"
     elif p["epochs"]:
-        modeltype = f"INTRO_only_{norm}_{p['epochs']}-m{m_plus}-lr{lr_enc}b1{beta1}b2{beta2}-w_rec{weight_rec}-w_neg{weight_neg}"
+        modeltype = f"INTRO_only{norm}_{p['epochs']}-m{m_plus}-lr{lr_enc}b1{beta1}b2{beta2}-w_rec{weight_rec}-w_neg{weight_neg}"
     else:
         modeltype = f"VAE{p['vae_epochs']}-b1{beta1}b2{beta2}"
-    txt_info   = f"txt:({txt_cond_type}-dense{cond_dim_txts}-rnn{rnn_dim}-emb{emb_dim})"  if txt_cond_type else ""
-    color_info = f"color:({color_cond_type}{cond_dim_color})" if color_cond_type else ""
+    txt_info   = f"txt:({txt_cond_type}-dense{cond_dim_txts}-rnn{rnn_dim}-emb{emb_dim})-"  if txt_cond_type else ""
+    color_info = f"color:({color_cond_type}{cond_dim_color})-" if color_cond_type else ""
+    cluster_info = f"cluster:({cluster_cond_type}{cond_dim_clusters})-" if cluster_cond_type else ""
     model_name = (f"{modeltype}-lr{lr_enc}-z{btlnk}"
-                  f"{color_info}-"
-                  f"{txt_info}-"
+                  f"{color_info}"
+                  f"{txt_info}"
+                  f"{cluster_info}"
                   f"{','.join(str(x) for x in img_dim)}")
 
     logfrq = ds_size//logs_per_epoch//batch_size
@@ -114,8 +117,9 @@ def main():
     #pipeline
     bg = batch_cond_spm(path_data, path_cond, spm, batch_size,
                         color_cond_type, txt_cond_type)
-    data = pipe(lambda: bg, (tf.float32, tf.float32, tf.float32),
+    data = pipe(lambda: bg, (tf.float32, tf.float32, tf.float32, tf.float32),
                 (tf.TensorShape([None, None, None, None]),
+                 tf.TensorShape([None, None]),
                  tf.TensorShape([None, None]),
                  tf.TensorShape([None, None])), prefetch=6)
     # model
@@ -126,11 +130,13 @@ def main():
                      cond_dim_color,
                      rnn_dim,
                      cond_dim_txts,
+                     cond_dim_clusters,
                      vocab_dim,
                      emb_dim,
                      color_cond_dim,
                      color_cond_type,
                      txt_cond_type,
+                     cluster_cond_type,
                      dropout_conditionals=dropout_conditionals,
                      dropout_encoder_resblock=dropout_encoder_resblock,
                      normalizer_enc = normalizer_enc,
@@ -222,7 +228,7 @@ def main():
                 with writer.as_default():
                     tf.summary.trace_export(name="introvae", step=0, profiler_outdir=path_log)
                 run_tests(model, writer,example_data[0][:4], example_data[1][:4],
-                          example_data[2][:4], spm, btlnk,
+                          example_data[2][:4], example_data[3][:4], spm, btlnk,
                           img_dim, batch_size=16, step=step,)
             # logging
             if step%logfrq==0:
@@ -260,7 +266,7 @@ def main():
                     writer.flush()
             if step%(logfrq*10)==0:
                  run_tests(model, writer,example_data[0][:4], example_data[1][:4],
-                              example_data[2][:4], spm, btlnk,
+                              example_data[2][:4], example_data[3][:4], spm, btlnk,
                               img_dim, batch_size=16, step=step,)
 
         # save model every epoch

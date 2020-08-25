@@ -35,6 +35,9 @@ def main():
         tf.config.experimental.set_visible_devices(gpus[0], 'GPU')
         tf.config.experimental.set_memory_growth(gpus[0], True)
 
+    path_imgs = os.path.expanduser("~/data/imgs/")
+    path_conditionals = os.path.expanduser("~/data/eudata_conditionals.npz")
+    add_resnet_condtionals(path_imgs, path_conditionals)
 
     print("lld dataset")
     path_imgs = os.path.expanduser("~/data/lld_boosted/")

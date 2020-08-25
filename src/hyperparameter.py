@@ -45,33 +45,34 @@ params = {
         "lr_dec":0.00005,
         "beta1": 0.9},
 
+    "dataset": {"only":{"path_ckpt": expanduser('~/data/models/'),
+                        "path_cond": expanduser('~/data/onlylogo_conditionals.npz'),
+                        "path_data": expanduser('~/data/only_logo'),
+                        "path_log": expanduser("~/cache/tensorboard-logdir/"),
+                        "path_spm": expanduser("~/data/logo_vocab"),
+                        "path_fid": expanduser("~/data/fid/"),
+                        "path_fid_dataset": expanduser("~/data/fid/mu_var_datasetonly.npz"),
+                        "path_inception": expanduser("~/data/"),},
+                "lld":{"path_ckpt": expanduser('~/data/models/'),
+                       "path_cond": expanduser('~/data/lldboosted_conditionals.npz'),
+                       "path_data": expanduser('~/data/lld_boosted'),
+                       "path_log": expanduser("~/cache/tensorboard-logdir/"),
+                       "path_spm": expanduser("~/data/logo_vocab"),
+                       "path_fid": expanduser("~/data/fid/"),
+                       "path_fid_dataset": expanduser("~/data/fid/mu_var_datasetlld.npz"),
+                       "path_inception": expanduser("~/data/"),},
+                "all":{"path_ckpt": expanduser('~/data/models/'),
+                       "path_cond": expanduser('~/data/eudata_conditionals.npz'),
+                       "path_data": expanduser('~/data/imgs'),
+                       "path_log": expanduser("~/cache/tensorboard-logdir/"),
+                       "path_spm": expanduser("~/data/logo_vocab"),
+                       "path_fid": expanduser("~/data/fid/"),
+                       "path_fid_dataset": expanduser("~/data/fid/mu_var_dataset.npz"),
+                       "path_inception": expanduser("~/data/"),}},
+
     "train":{
-        #"path_ckpt": expanduser('~/data/models/'),
-        #"path_cond": expanduser('~/data/eudata_conditionals.npz'),
-        #"path_data": expanduser('~/data/imgs'),
-        #"path_log": expanduser("~/cache/tensorboard-logdir/"),
-        #"path_spm": expanduser("~/data/logo_vocab"),
-        #"path_fid": expanduser("~/data/fid/"),
-        #"path_inception": expanduser("~/data/"),
-
-
-        #"path_ckpt": expanduser('~/data/models/'),
-        #"path_cond": expanduser('~/data/onlylogo_conditionals.npz'),
-        #"path_data": expanduser('~/data/only_logo'),
-        #"path_log": expanduser("~/cache/tensorboard-logdir/"),
-        #"path_spm": expanduser("~/data/logo_vocab"),
-        #"path_fid": expanduser("~/data/fid/"),
-        #"path_inception": expanduser("~/data/"),
-
-        "path_ckpt": expanduser('~/data/models/'),
-        "path_cond": expanduser('~/data/lldboosted_conditionals.npz'),
-        "path_data": expanduser('~/data/lld_boosted'),
-        "path_log": expanduser("~/cache/tensorboard-logdir/"),
-        "path_spm": expanduser("~/data/logo_vocab"),
-        "path_fid": expanduser("~/data/fid/"),
-        "path_inception": expanduser("~/data/"),
-
         "gpu": 0,
+        "dataset": "lld", # "all" "only"
         "restore_model":False, #empty or modelname for model stored at path_ckpt
         "color_cond_type": None, #"one_hot", # "continuous"
         "txt_cond_type": None, #"rnn" #"bert"

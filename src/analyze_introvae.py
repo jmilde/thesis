@@ -20,7 +20,7 @@ import math
 
 
 def calculate_scores(model, data, writer, path_fid, path_inception, model_name,
-                     batch_size, fid_samples_nr):
+                     batch_size, fid_samples_nr, path_fid_dataset):
     print("save 50.000 generated samples")
     path_fid_data = os.path.join(path_fid, model_name)
     if not os.path.isdir(path_fid_data):
@@ -67,8 +67,8 @@ def calculate_scores(model, data, writer, path_fid, path_inception, model_name,
         print("calculate FID Score")
         mu1= np.load(os.path.join(path_fid, f"{model_name}.npz"), allow_pickle=True)["mu"]
         sigma1= np.load(os.path.join(path_fid, f"{model_name}.npz"), allow_pickle=True)["sigma"]
-        mu2= np.load(os.path.join(path_fid, f"mu_var_dataset.npz"), allow_pickle=True)["mu"]
-        sigma2= np.load(os.path.join(path_fid, f"mu_var_dataset.npz"), allow_pickle=True)["sigma"]
+        mu2= np.load(os.path.join(path_fid, path_fid_dataset), allow_pickle=True)["mu"]
+        sigma2= np.load(os.path.join(path_fid, path_fid_dataset), allow_pickle=True)["sigma"]
         fid_score = calculate_frechet_distance(mu1, sigma1, mu2, sigma2)
         print(f"FID SCORE: {fid_score}")
         with writer.as_default():

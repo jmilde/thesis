@@ -41,6 +41,6 @@ def calc_and_save_reference(data_path, output_path, inception_path=None):
     print("finished")
 
 if __name__=="__main__":
-    calc_and_save_reference(data_path=os.path.expanduser("~/imgs"),
-                            output_path=os.path.expanduser("~/mu_var_dataset"),
+    calc_and_save_reference(data_path=os.path.expanduser("~/data/imgs"),
+                            output_path=os.path.expanduser("~/data/fid/mu_var_dataset"),
                             inception_path=os.path.expanduser("~/"))

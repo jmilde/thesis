@@ -30,13 +30,16 @@ def main():
     os.environ['PYTHONHASHSEED']=str(SEED)
     np.random.seed(SEED)
     tf.random.set_seed(SEED)
+    dataset                  = p["dataset"]
+    path_ckpt                = params["dataset"][dataset]['path_ckpt']
+    path_cond                = params["dataset"][dataset]['path_cond']
+    path_data                = params["dataset"][dataset]['path_data']
+    path_log                 = params["dataset"][dataset]['path_log']
+    path_spm                 = params["dataset"][dataset]['path_spm']
+    path_fid                 = params["dataset"][dataset]["path_fid"]
+    path_fid_dataset         = params["dataset"][dataset]["path_fid_dataset"]
+    path_inception           = params["dataset"][dataset]["path_inception"]
 
-    path_ckpt                = p['path_ckpt']
-    path_cond                = p['path_cond']
-    path_data                = p['path_data']
-    path_log                 = p['path_log']
-    path_spm                 = p['path_spm']
-    path_fid                 = p["path_fid"]
     restore_model            = p['restore_model']
     img_dim                  = p['img_dim']
     btlnk                    = p['btlnk']
@@ -94,7 +97,7 @@ def main():
     if p["vae_epochs"] and p["epochs"]:
         modeltype = f"INTRO{norm}_{p['epochs']}_pre{p['vae_epochs']}-m{m_plus}-b1{beta1}b2{beta2}-w_rec{weight_rec}-w_neg{weight_neg}"
     elif p["epochs"]:
-        modeltype = f"INTRO_only{norm}_{p['epochs']}-m{m_plus}-lr{lr_enc}b1{beta1}b2{beta2}-w_rec{weight_rec}-w_neg{weight_neg}"
+        modeltype = f"INTRO_{dataset}{norm}_{p['epochs']}-m{m_plus}-lr{lr_enc}b1{beta1}b2{beta2}-w_rec{weight_rec}-w_neg{weight_neg}"
     else:
         modeltype = f"VAE{p['vae_epochs']}-b1{beta1}b2{beta2}"
     txt_info   = f"txt:({txt_cond_type}-dense{cond_dim_txts}-rnn{rnn_dim}-emb{emb_dim})-"  if txt_cond_type else ""
@@ -274,8 +277,8 @@ def main():
         print(f"\nsaved model after epoch {epoch}\n")
 
     # calcualte Scores
-    calculate_scores(model, data, writer, path_fid, p["path_inception"], model_name, batch_size,
-                     fid_samples_nr)
+    calculate_scores(model, data, writer, path_fid, path_inception, model_name, batch_size,
+                     fid_samples_nr, path_fid_dataset)
 
 
 

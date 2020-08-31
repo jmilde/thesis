@@ -29,7 +29,7 @@ def calculate_scores(model, data, writer, path_fid, path_inception, model_name,
     imgs= []
     for _ in tqdm(range(math.ceil(fid_samples_nr//batch_size+1))):
         inpt = next(data)
-        output = model.train(*inpt)
+        output = model.call(*inpt)
         imgs_array = output["x_p"].numpy()
         imgs.extend(imgs_array)
         for img in imgs_array:
@@ -104,14 +104,13 @@ def run_tests(model, writer, img_embs, colors, txts, clusters, spm, btlnk, img_d
             x_gen.extend(model.decode(x, cond_color, cond_txt, cond_cluster).numpy())
 
             # latent space walk from real image to random point
-            _, mu, _ = model.encode(img_emb[np.newaxis, :])
+            _, mu, _ = model.encode(img_emb[np.newaxis, :], color[np.newaxis, :], txt[np.newaxis, :], cluster[np.newaxis, :])
             zs = move_through_latent(mu[0], x[0], batch_size)
             zs_gen.extend(model.decode( zs, cond_color, cond_txt, cond_cluster))
 
             # text exploration
             if model.txt_cond_type:
                 txt_samples = ["firma name", "G", "A",  "kaltes bier", "vogel", "bird", "pelikan", "imperceptron", "albatros coding", "tree leaves", "nice coffee", "german engineering", "abcdef ghij", "klmnopq", "rstu vwxyz", "0123456789"]
-                _, x, _ = model.encode(np.repeat(img_emb[np.newaxis, :], batch_size, axis=0))
                 cond_color= None
                 if model.color_cond_type:
                     cond_color = np.repeat(color[np.newaxis, :], batch_size, axis=0)
@@ -120,17 +119,16 @@ def run_tests(model, writer, img_embs, colors, txts, clusters, spm, btlnk, img_d
                 if model.txt_cond_type=="rnn":
                     t = [spm.encode_as_ids(t) for t in txt_samples]
                     cond_txt = vpack(t, (batch_size, max(map(len,t))), fill=1,  dtype="int64")
-
                 elif model.txt_cond_type=="bert":
                     # used prep_bert.py to get the bert embeddingsfor the txt_samples
                     cond_txt = np.load(os.path.expanduser("~/data/txt.npz"),
                                        allow_pickle=True)["txts"]
 
-
+                _, x, _ = model.encode(np.repeat(img_emb[np.newaxis, :], batch_size, axis=0),
+                                       cond_color, cond_txt, cond_cluster)
                 x_txt.extend(model.decode(x, color=cond_color, txt=cond_txt, cluster=cond_cluster))
 
             if model.cluster_cond_type:
-                _, x, _ = model.encode(np.repeat(img_emb[np.newaxis, :], 10, axis=0))
                 cond_color = np.repeat(color[np.newaxis, :], 10, axis=0) if model.color_cond_type else None
                 cond_txt = np.repeat(txt[np.newaxis, :], 10, axis=0)  if model.txt_cond_type else None
                 cond_cluster = []
@@ -138,6 +136,8 @@ def run_tests(model, writer, img_embs, colors, txts, clusters, spm, btlnk, img_d
                     zeros = np.zeros(10)
                     zeros[i]=1
                     cond_cluster.append(zeros)
+                _, x, _ = model.encode(np.repeat(img_emb[np.newaxis, :], 10, axis=0),
+                                       cond_color, cond_txt, np.array(cond_cluster))
                 x_cluster.extend(model.decode(x, color=cond_color, txt=cond_txt, cluster=np.array(cond_cluster)))
 
             if model.color_cond_type:
@@ -203,13 +203,14 @@ def run_tests(model, writer, img_embs, colors, txts, clusters, spm, btlnk, img_d
                                             0.11, 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.16, 0.01, 0.  ,
                                             0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ,
                                             0.  , 0.  , 0.  , 0.01, 0.  , 0.  , 0.  , 0.  , 0.59],])
-
-                _, x, _ = model.encode(np.repeat(img_emb[np.newaxis, :],  color_batchsize, axis=0))
                 cond_txt = None
                 if model.txt_cond_type:
                     cond_txt = np.repeat(txt[np.newaxis, :],  color_batchsize , axis=0)
+                cond_cluster=None
                 if model.cluster_cond_type:
                     cond_cluster = np.repeat(cluster[np.newaxis, :],  color_batchsize , axis=0)
+                _, x, _ = model.encode(np.repeat(img_emb[np.newaxis, :],  color_batchsize, axis=0),
+                                       cond_color, cond_txt, cond_cluster)
                 x_color.extend(model.decode(x, cond_color, cond_txt, cond_cluster))
 
         with writer.as_default():

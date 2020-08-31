@@ -45,6 +45,7 @@ def main():
     btlnk                    = p['btlnk']
     channels                 = p['channels']
     cond_dim_color           = p['cond_dim_color']
+    cond_model               = p['cond_model']
     rnn_dim                  = p['rnn_dim']
     cond_dim_txts            = p['cond_dim_txts']
     cond_dim_clusters        = p['cond_dim_clusters']
@@ -103,7 +104,9 @@ def main():
     txt_info   = f"txt:({txt_cond_type}-dense{cond_dim_txts}-rnn{rnn_dim}-emb{emb_dim})-"  if txt_cond_type else ""
     color_info = f"color:({color_cond_type}{cond_dim_color})-" if color_cond_type else ""
     cluster_info = f"cluster:({cluster_cond_type}{cond_dim_clusters})-" if cluster_cond_type else ""
+    cond_info = f"{cond_model}-" if cond_model else ""
     model_name = (f"{modeltype}-lr{lr_enc}-z{btlnk}"
+                  f"{cond_info}"
                   f"{color_info}"
                   f"{txt_info}"
                   f"{cluster_info}"
@@ -140,6 +143,7 @@ def main():
                      color_cond_type,
                      txt_cond_type,
                      cluster_cond_type,
+                     cond_model,
                      dropout_conditionals=dropout_conditionals,
                      dropout_encoder_resblock=dropout_encoder_resblock,
                      normalizer_enc = normalizer_enc,

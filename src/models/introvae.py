@@ -26,6 +26,7 @@ class INTROVAE(tf.keras.Model):
                  **kwargs):
         super(INTROVAE, self).__init__(name=name, **kwargs)
 
+        self.cond_model          = cond_model
         self.color_cond_type     = color_cond_type
         self.txt_cond_type       = txt_cond_type
         self.cluster_cond_type   = cluster_cond_type

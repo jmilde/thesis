@@ -59,6 +59,7 @@ def main():
     weight_rec               = p['weight_rec']
     weight_kl                = p['weight_kl']
     weight_neg               = p['weight_neg']
+    weight_aux               = p['weight_aux']
     m_plus                   = p['m_plus']
     lr_enc                   = p['lr_enc']
     lr_dec                   = p['lr_dec']
@@ -72,7 +73,10 @@ def main():
     cluster_cond_type        = p['cluster_cond_type']
     txt_cond_type            = p['txt_cond_type']
     fid_samples_nr           = p["fid_samples_nr"]
+    auxilary                 = p["auxilary"]
     color_cond_dim           = len(np.load(path_cond, allow_pickle=True)["colors_old" if color_cond_type=="one_hot" else "colors"][1])
+    cluster_cond_dim         = 10
+    txt_cond_dim             = len(np.load(path_cond, allow_pickle=True)["txts" if txt_cond_type=="rnn" else "txt_embs"][1])
 
     if not p["normalizer_enc"]:
         norm = "_NONE"
@@ -105,7 +109,9 @@ def main():
     color_info = f"color:({color_cond_type}{cond_dim_color})-" if color_cond_type else ""
     cluster_info = f"cluster:({cluster_cond_type}{cond_dim_clusters})-" if cluster_cond_type else ""
     cond_info = f"{cond_model}-" if cond_model else ""
+    aux_info = f"aux-{weight_aux}" if auxilary else ""
     model_name = (f"{modeltype}-lr{lr_enc}-z{btlnk}"
+                  f"{aux_info}"
                   f"{cond_info}"
                   f"{color_info}"
                   f"{txt_info}"
@@ -140,6 +146,8 @@ def main():
                      vocab_dim,
                      emb_dim,
                      color_cond_dim,
+                     txt_cond_dim,
+                     cluster_cond_dim,
                      color_cond_type,
                      txt_cond_type,
                      cluster_cond_type,
@@ -151,6 +159,7 @@ def main():
                      weight_rec=weight_rec,
                      weight_kl=weight_kl,
                      weight_neg = weight_neg,
+                     weight_aux = weight_aux,
                      m_plus = m_plus,
                      lr_enc= lr_enc,
                      lr_dec= lr_dec,
@@ -158,7 +167,8 @@ def main():
                      beta2 = beta2,
                      noise_color =noise_color,
                      noise_txt =noise_txt,
-                     noise_img =noise_img,)
+                     noise_img =noise_img,
+                     auxilary=auxilary)
 
     # workaround for memoryleak ?
     tf.keras.backend.clear_session()
@@ -265,11 +275,13 @@ def main():
                     tf.summary.scalar("loss_rec" , output["loss_rec"].numpy() , step=step)
                     tf.summary.scalar("mu"       , output["mu"].numpy()       , step=step)
                     tf.summary.scalar("lv"       , output["lv"].numpy()       , step=step)
-                    tf.summary.scalar("kl_real"       , output["kl_real"].numpy()       , step=step)
-                    tf.summary.scalar("kl_fake"       , output["kl_fake"].numpy()       , step=step)
-                    tf.summary.scalar("kl_rec"       , output["kl_rec"].numpy()       , step=step)
-                    tf.summary.scalar("loss_enc_adv"  , output["loss_enc_adv"].numpy()  , step=step)
-                    tf.summary.scalar("loss_dec_adv"  , output["loss_dec_adv"].numpy()  , step=step)
+                    tf.summary.scalar("kl_real"  , output["kl_real"].numpy()  , step=step)
+                    tf.summary.scalar("kl_fake"  , output["kl_fake"].numpy()  , step=step)
+                    tf.summary.scalar("kl_rec"   , output["kl_rec"].numpy()   , step=step)
+                    tf.summary.scalar("loss_enc_adv" , output["loss_enc_adv"].numpy()  , step=step)
+                    tf.summary.scalar("loss_dec_adv" , output["loss_dec_adv"].numpy()  , step=step)
+                    if model.auxilary:
+                        tf.summary.scalar("loss_aux" , output["loss_aux"].numpy()  , step=step)
                     writer.flush()
             if step%(logfrq*10)==0:
                  run_tests(model, writer,example_data[0][:4], example_data[1][:4],

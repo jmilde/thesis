@@ -71,11 +71,12 @@ params = {
                        "path_inception": expanduser("~/data/"),}},
 
     "train":{
-        "gpu": 0,
+        "gpu": 3,
         "dataset": "lld", # "all" "only"
         "restore_model":False, #empty or modelname for model stored at path_ckpt
-        "cond_model": "dec", # None, "dec"
-        "color_cond_type": "continuous", #"one_hot", # "continuous"
+        "cond_model": "enc_dec", # None, "dec"
+        "auxilary": True,
+        "color_cond_type": "one_hot", #"one_hot", # "continuous"
         "txt_cond_type": None, #"rnn" #"bert"
         "cluster_cond_type": None, #"vgg"
         "normalize": True,
@@ -98,9 +99,9 @@ params = {
         # training
         "vae_epochs": 0, # pretrain only vae
         "epochs": 276, #lld:276, all:20, only:115
-        "batch_size": 64,
+        "batch_size": 60,
         "logs_per_epoch": 100,  # log ~100x per epoch
-        "fid_samples_nr": 50000,
+        "fid_samples_nr": 25000,
         'normalizer_enc': "batch", #None "instance" "batch" "group" "layer"
         'normalizer_dec': "batch", #None "instance" "batch" "group" "layer"
 
@@ -108,6 +109,7 @@ params = {
         "weight_rec": 0.25, # beta: og:0.5, 0.01 - 100, larger β improves reconstruction quality but may influence sample diversity
         "weight_kl": 1,
         "weight_neg": 0.25, # alpha: og:0.25, 0.1-0.5
+        "weight_aux": 50000,
         "m_plus": 110, #og:110, #250 should be selected according to the value of β, to balance advaserial loss
         "lr_enc": 0.0001, #0.0002,
         "lr_dec": 0.0001, #0.0002,

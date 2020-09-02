@@ -4,7 +4,8 @@ from src.util_tf import ResBlock, VariationalEncoding, downsampling_res_block, u
 
 class INTROVAE(tf.keras.Model):
     def __init__(self, inpt_dim, channels, btlnk, batch_size, cond_dim_colors,
-                 rnn_dim, cond_dim_txts, cond_dim_clusters, vocab_dim, emb_dim, color_cond_dim,
+                 rnn_dim, cond_dim_txts, cond_dim_clusters, vocab_dim, emb_dim,
+                 color_cond_dim, txt_cond_dim, cluster_cond_dim,
                  color_cond_type, txt_cond_type, cluster_cond_type,
                  cond_model               = None,
                  normalizer_enc           = tf.keras.layers.BatchNormalization,
@@ -12,6 +13,7 @@ class INTROVAE(tf.keras.Model):
                  weight_rec               = 1,
                  weight_kl                = 1,
                  weight_neg               = 1,
+                 weight_aux               = 1,
                  m_plus                   = 100,
                  lr_enc                   = 0.0002,
                  lr_dec                   = 0.0002,
@@ -22,10 +24,12 @@ class INTROVAE(tf.keras.Model):
                  noise_img                = 0,
                  dropout_conditionals     = 0,
                  dropout_encoder_resblock = 0,
+                 auxilary                 = False,
                  name                     = "Introvae",
                  **kwargs):
         super(INTROVAE, self).__init__(name=name, **kwargs)
 
+        self.auxilary            = auxilary
         self.cond_model          = cond_model
         self.color_cond_type     = color_cond_type
         self.txt_cond_type       = txt_cond_type
@@ -36,6 +40,7 @@ class INTROVAE(tf.keras.Model):
         self.weight_rec          = weight_rec
         self.weight_kl           = weight_kl
         self.weight_neg          = weight_neg
+        self.weight_aux          = weight_aux
         self.m_plus              = m_plus
 
         # encoding
@@ -48,11 +53,19 @@ class INTROVAE(tf.keras.Model):
                                                          cluster_cond_type,
                                                          cond_dim_colors,
                                                          cond_dim_txts,
-                                                         cond_dim_clusters)
+                                                         cond_dim_clusters,
+                                                         rnn_dim, vocab_dim, emb_dim)
         self.encoder             = Encoder(inpt_dim, channels, btlnk, cond_model=cond_model,
                                            normalizer=normalizer_enc,
                                            dropout_rate=dropout_encoder_resblock)
         self.noise_img           = tf.keras.layers.GaussianNoise(noise_img)
+        if auxilary:
+            self.auxilary_loss =  Auxilary_loss(color_cond_type,
+                                                txt_cond_type,
+                                                cluster_cond_type,
+                                                color_dim=color_cond_dim,
+                                                cluster_dim=cluster_cond_dim,
+                                                txt_dim=txt_cond_dim)
 
         # decoding
         self.decoder= Decoder(inpt_dim, channels[::-1], rnn_dim,
@@ -157,11 +170,26 @@ class INTROVAE(tf.keras.Model):
         _, dec_mu_r, dec_lv_r = self.encode(x_r, x_color, x_txt, x_cluster, training=training) # encode reconstruction
         _, dec_mu_p, dec_lv_p = self.encode(x_p, x_color, x_txt, x_cluster, training=training) # encode fake
 
+
+
         ### DECODER
         kl_rec       = self.kl_loss(dec_mu_r, dec_lv_r)
         kl_fake      = self.kl_loss(dec_mu_p, dec_lv_p)
         loss_dec_adv = 0.5*(kl_rec + kl_fake) * self.weight_kl
         loss_dec     = loss_dec_adv + loss_rec
+
+        if self.auxilary:
+            # TODO input mu_r_??
+            loss_aux = self.auxilary_loss(dec_mu_p, dec_mu_r,
+                                          color_label=colors,
+                                          cluster_label=clusters,
+                                          txt_label=txts,
+                                          training=training)
+            loss_aux = self.weight_aux * loss_aux
+            loss_enc += loss_aux
+            loss_dec += loss_aux
+        else:
+            loss_aux = 0
 
         return {"x"            : x,
                 "z_p"          : z_p,
@@ -176,7 +204,8 @@ class INTROVAE(tf.keras.Model):
                 "mu"           : tf.reduce_mean(mu),
                 "lv"           : tf.reduce_mean(lv),
                 "loss_enc_adv" : loss_enc_adv,
-                "loss_dec_adv" : loss_dec_adv,}
+                "loss_dec_adv" : loss_dec_adv,
+                "loss_aux"     : loss_aux}
 
 
     @tf.function(experimental_relax_shapes=True)
@@ -185,19 +214,69 @@ class INTROVAE(tf.keras.Model):
             output = self.call(x, colors, txts, clusters, training=True)
             e_loss = output["loss_enc"] # encoder
             d_loss = output["loss_dec"] # decoder
+
+        enc_variables = self.encoder.trainable_variables
         if self.cond_model=="enc_dec":
-            enc_variables = self.encoder.trainable_variables + self.conditional_embedder.trainable_variables
-        else:
-            enc_variables = self.encoder.trainable_variables
+            enc_variables += self.conditional_embedder.trainable_variables
+        if self.auxilary:
+            enc_variables += self.auxilary_loss.trainable_variables
         self.optimizer_enc.apply_gradients(
             zip(e_tape.gradient(e_loss, enc_variables),
                 enc_variables))
+
+        dec_variables = self.decoder.trainable_variables + self.conditional_embedder.trainable_variables
+        if self.auxilary:
+            dec_variables += self.auxilary_loss.trainable_variables
         self.optimizer_dec.apply_gradients(
-            zip(d_tape.gradient(d_loss, self.decoder.trainable_variables + self.conditional_embedder.trainable_variables),
-                self.decoder.trainable_variables + self.conditional_embedder.trainable_variables))
+            zip(d_tape.gradient(d_loss, dec_variables),dec_variables))
         return output
 
+class Auxilary_loss(tf.keras.layers.Layer):
+    def __init__(self,
+                 color_cond_type,
+                 txt_cond_type,
+                 cluster_cond_type,
+                 color_dim=None,
+                 cluster_dim=None,
+                 txt_dim=None,
+                 name="Auxilary_loss",
+                 **kwargs):
+        super(Auxilary_loss, self).__init__(name=name, **kwargs)
+        self.color_cond_type = color_cond_type
+        self.txt_cond_type = txt_cond_type
+        self.cluster_cond_type = cluster_cond_type
 
+        if color_cond_type:
+            self.dense_color   = tf.keras.layers.Dense(color_dim, name="dense_color")
+        if cluster_cond_type:
+            self.dense_cluster = tf.keras.layers.Dense(cluster_dim, name="dense_cluster")
+        if txt_cond_type:
+            self.dense_txt     = tf.keras.layers.Dense(txt_dim, name="dense_txt")
+    def call(self, z_p, z_r, color_label=None, cluster_label=None, txt_label=None, training=False):
+        loss_aux = 0
+        mean = 0
+        if self.color_cond_type=="one_hot":
+            c_r_color   = self.dense_color(z_r)
+            c_p_color   = self.dense_color(z_p)
+            aux_r_color = tf.keras.losses.categorical_crossentropy(color_label, c_r_color, from_logits=True)
+            aux_p_color = tf.keras.losses.categorical_crossentropy(color_label, c_p_color, from_logits=True)
+            loss_aux    += (aux_r_color + aux_p_color)/2
+            mean        +=1
+        #if self.color_cond_type=="continuous":
+        #    c_r = self.dense_aux_cont(dec_mu_r)
+        #    c_p = self.dense_aux_cont(dec_mu_p)
+        #if self.txt_cond_type:
+        #    c_r = self.dense_aux_txt(dec_mu_r)
+        #    c_p = self.dense_aux_txt(dec_mu_p)
+        if self.cluster_cond_type:
+            c_r_cluster   = self.dense_cluster(z_r)
+            c_p_cluster   = self.dense_cluster(z_p)
+            aux_r_cluster = tf.keras.losses.categorical_crossentropy(cluster_label, c_r_cluster, from_logits=True)
+            aux_p_cluster = tf.keras.losses.categorical_crossentropy(cluster_label, c_p_cluster, from_logits=True)
+            loss_aux      += (aux_r_cluster + aux_p_cluster)/2
+            mean          += 1
+        loss_aux= tf.reduce_mean(loss_aux)/mean
+        return loss_aux
 
 
 class Encoder(tf.keras.layers.Layer):
@@ -262,6 +341,7 @@ class Conditional_Embedder(tf.keras.layers.Layer):
                  cond_dim_colors,
                  cond_dim_txts,
                  cond_dim_clusters,
+                 rnn_dim, vocab_dim, emb_dim,
                  name="Conditional_Embedder",
                  **kwargs):
         super(Conditional_Embedder, self).__init__(name=name, **kwargs)
@@ -303,7 +383,7 @@ class Conditional_Embedder(tf.keras.layers.Layer):
         elif self.cluster_cond_type and self.color_cond_type:
             return  tf.concat([cond_color, cond_cluster], 1)
         elif self.txt_cond_type:
-            return  cond_txts
+            return  cond_txt
         elif self.color_cond_type:
             return  cond_color
         elif self.cluster_cond_type:

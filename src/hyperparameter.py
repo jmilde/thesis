@@ -79,6 +79,8 @@ params = {
         "color_cond_type": "one_hot", #"one_hot", # "continuous"
         "txt_cond_type": None, #"rnn" #"bert"
         "cluster_cond_type": None, #"vgg"
+        "txt_len_min"=0,
+        "txt_len_max"=9999,
         "normalize": True,
 
         # parameters

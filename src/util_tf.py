@@ -18,12 +18,14 @@ def spread_image(x, nrow, ncol, height, width):
 
 
 def batch_cond_spm(path_imgs, path_cond, spm, batch_size, cond_type_color="old",
-                   cond_type_txt="bert", cond_cluster_type="vgg", seed=26):
+                   cond_type_txt="bert", cond_cluster_type="vgg",
+                   txt_len_min=0, txt_len_max=9999, seed=26):
     """batch function to use with pipe
     cond_type_color = 'one_hot' or 'continuous'
     """
 
     color_cond = "colors_old" if cond_type_color=="one_hot" else "colors"
+    txt_len = list(map(len,  np.load(path_cond, allow_pickle=True)["txts"]))
     txt_cond = "txts" if cond_type_txt=="rnn" else  "txt_embs"
     cluster_cond = "res_cluster" if cond_cluster_type=="vgg" else ""
     one_hot  = np.eye(10, dtype="float32") if cond_cluster_type=="vgg" else np.eye(1)
@@ -40,11 +42,12 @@ def batch_cond_spm(path_imgs, path_cond, spm, batch_size, cond_type_color="old",
                    vpack(t, (batch_size, max(map(len,t))), fill=1,  dtype="float32"),
                    one_hot[np.array(cl)])
             i, c, t, cl = [], [], [], []
-        i.append(io.imread(os.path.join(path_imgs, f"{j}.png"))/255)
-        c.append(colors[j])
-        cl.append(cluster[j])
-        txt = spm.encode_as_ids(txts[j]) if cond_type_txt=="rnn" else txts[j]
-        t.append(txt)
+        if txt_len_min<=txt_len[j]<=txt_len_max:
+            i.append(io.imread(os.path.join(path_imgs, f"{j}.png"))/255)
+            c.append(colors[j])
+            cl.append(cluster[j])
+            txt = spm.encode_as_ids(txts[j]) if cond_type_txt=="rnn" else txts[j]
+            t.append(txt)
 
 
 

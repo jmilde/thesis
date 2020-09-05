@@ -1,4 +1,5 @@
 from datetime import datetime
+from collections import Counter
 from matplotlib import pyplot as plt
 from os.path import expanduser
 from src.models.introvae import INTROVAE
@@ -17,30 +18,47 @@ from src.prep_fid import calc_and_save_reference
 from skimage.io import imsave
 import math
 
+def generate_imgs(model, data, path_fid_data, model_name, fid_samples_nr, batch_size, training=False):
+    bn = "bn" if training else ""
 
+    img_path = os.path.join(path_fid_data, f"imgs{bn}")
+    if not os.path.isdir(img_path):
+        os.mkdir(img_path)
 
-def calculate_scores(model, data, writer, path_fid, path_inception, model_name,
-                     batch_size, fid_samples_nr, path_fid_dataset):
-    print("save 50.000 generated samples")
-    path_fid_data = os.path.join(path_fid, model_name)
-    if not os.path.isdir(path_fid_data):
-        os.mkdir(path_fid_data)
     sample_nr = 0
-    imgs= []
+    imgs, colors, txts, clusters = [], [], [], []
     for _ in tqdm(range(math.ceil(fid_samples_nr//batch_size+1))):
-        inpt = next(data)
-        output = model.call(*inpt)
+        imgs, color, txt, cluster = next(data)
+        output = model.call(imgs, color, txt, cluster, training=training)
         imgs_array = output["x_p"].numpy()
         imgs.extend(imgs_array)
         for img in imgs_array:
             if sample_nr<=fid_samples_nr:
-                imsave(os.path.join(path_fid_data,
+                imsave(os.path.join(img_path,
                                     f"{sample_nr}.png"),
                        np.clip(img*255, a_min=0, a_max=255).astype("uint8"))
                 sample_nr += 1
-
+                colors.append(color)
+                txts.append(txt)
+                clusters.append(cluster)
             else:
                 break
+    np.savez_compressed(os.path.join(path_fid_data, f"conditionals{bn}.npz"),
+                        colors= colors,
+                        txts = txts,
+                        clusters = clusters)
+    return imgs
+
+
+def calculate_scores(model, data, writer, path_fid, path_inception, model_name,
+                     batch_size, fid_samples_nr, path_fid_dataset):
+    path_fid_data = os.path.join(path_fid, model_name)
+    if not os.path.isdir(path_fid_data):
+        os.mkdir(path_fid_data)
+
+    print("save 50.000 generated samples")
+    imgs = generate_imgs(model, data, path_fid, model_name,
+                         fid_samples_nr, batch_size, training=False)
 
     print("Calculate MS-SSIM Score")
     with tf.device('/CPU:0'):
@@ -73,6 +91,43 @@ def calculate_scores(model, data, writer, path_fid, path_inception, model_name,
         print(f"FID SCORE: {fid_score}")
         with writer.as_default():
             tf.summary.scalar("FID_score"  , fid_score , step=0)
+            writer.flush()
+
+    print("save 50.000 generated samples WITH BATCHNORM")
+    imgs = generate_imgs(model, data, path_fid, model_name,
+                         fid_samples_nr, batch_size, training=True)
+
+    print("Calculate MS-SSIM Score")
+    with tf.device('/CPU:0'):
+        imgs = np.clip(np.array(imgs[:50000])*255, 0 , 255)
+        x = []
+        for a,b in zip(np.array_split(imgs[:len(imgs)//2], 5),
+                       np.array_split(imgs[len(imgs)//2:], 5)):
+            x.extend( tf.image.ssim_multiscale(a,
+                                               b,
+                                               255,
+                                               filter_size=8))
+        ms_ssim = tf.math.reduce_mean(x)
+        print(f"MS_SSIM BN: {ms_ssim}")
+
+        with writer.as_default():
+            tf.summary.scalar("MS_SSIM_score_BN" , ms_ssim , step=0)
+            writer.flush()
+
+        print("caluclate mean and var")
+        calc_and_save_reference(path_fid_data,
+                            os.path.join(path_fid, f"{model_name}_BN.npz"),
+                            inception_path=path_inception)
+
+        print("calculate FID Score")
+        mu1= np.load(os.path.join(path_fid, f"{model_name}_BN.npz"), allow_pickle=True)["mu"]
+        sigma1= np.load(os.path.join(path_fid, f"{model_name}_BN.npz"), allow_pickle=True)["sigma"]
+        mu2= np.load(os.path.join(path_fid, path_fid_dataset), allow_pickle=True)["mu"]
+        sigma2= np.load(os.path.join(path_fid, path_fid_dataset), allow_pickle=True)["sigma"]
+        fid_score = calculate_frechet_distance(mu1, sigma1, mu2, sigma2)
+        print(f"FID SCORE BN: {fid_score}")
+        with writer.as_default():
+            tf.summary.scalar("FID_score_BN"  , fid_score , step=0)
             writer.flush()
 
 
@@ -359,3 +414,14 @@ def load_model():
     ckpt.restore(manager.latest_checkpoint)
     print("\nmodel restored\n")
     return model
+
+
+def plot_text_condtionals(path, max_len=10, min_len=1):
+    txts = np.load(expanduser(path), allow_pickle=True)["txts"]
+    txt_len = [len(x) for x in txts if min_len<=len(x)<=max_len ]
+    n_bin = max(txt_len)
+    print("number of logos: ", len(txt_len))
+    _ = plt.hist(txt_len, n_bin)
+    plt.ylabel("count")
+    plt.xlabel("length")
+    plt.show()

@@ -180,7 +180,7 @@ class INTROVAE(tf.keras.Model):
 
         if self.auxilary:
             # TODO input mu_r_??
-            loss_aux = self.auxilary_loss(dec_mu_p, dec_mu_r,
+            loss_aux, pred_r, pred_p = self.auxilary_loss(dec_mu_p, dec_mu_r,
                                           color_label=colors,
                                           cluster_label=clusters,
                                           txt_label=txts,
@@ -205,7 +205,9 @@ class INTROVAE(tf.keras.Model):
                 "lv"           : tf.reduce_mean(lv),
                 "loss_enc_adv" : loss_enc_adv,
                 "loss_dec_adv" : loss_dec_adv,
-                "loss_aux"     : loss_aux}
+                "loss_aux"     : loss_aux,
+                "pred_r"       : pred_r,
+                "pred_p"       : pred_p}
 
 
     @tf.function(experimental_relax_shapes=True)
@@ -245,6 +247,7 @@ class Auxilary_loss(tf.keras.layers.Layer):
         self.color_cond_type = color_cond_type
         self.txt_cond_type = txt_cond_type
         self.cluster_cond_type = cluster_cond_type
+        self.softmax = tf.keras.layers.Softmax()
 
         if color_cond_type:
             self.dense_color   = tf.keras.layers.Dense(color_dim, name="dense_color")
@@ -269,14 +272,14 @@ class Auxilary_loss(tf.keras.layers.Layer):
         #    c_r = self.dense_aux_txt(dec_mu_r)
         #    c_p = self.dense_aux_txt(dec_mu_p)
         if self.cluster_cond_type:
-            c_r_cluster   = self.dense_cluster(z_r)
-            c_p_cluster   = self.dense_cluster(z_p)
-            aux_r_cluster = tf.keras.losses.categorical_crossentropy(cluster_label, c_r_cluster, from_logits=True)
-            aux_p_cluster = tf.keras.losses.categorical_crossentropy(cluster_label, c_p_cluster, from_logits=True)
+            c_r_cluster   = self.softmax(self.dense_cluster(z_r))
+            c_p_cluster   = self.softmax(self.dense_cluster(z_p))
+            aux_r_cluster = tf.keras.losses.categorical_crossentropy(cluster_label, c_r_cluster, from_logits=False)
+            aux_p_cluster = tf.keras.losses.categorical_crossentropy(cluster_label, c_p_cluster, from_logits=False)
             loss_aux      += (aux_r_cluster + aux_p_cluster)/2
             mean          += 1
         loss_aux= tf.reduce_mean(loss_aux)/mean
-        return loss_aux
+        return loss_aux, c_r_cluster, c_p_cluster
 
 
 class Encoder(tf.keras.layers.Layer):

@@ -74,6 +74,8 @@ def main():
     txt_cond_type            = p['txt_cond_type']
     fid_samples_nr           = p["fid_samples_nr"]
     auxilary                 = p["auxilary"]
+    txt_len_min              = p["txt_len_min"]
+    txt_len_max              = p["txt_len_max"]
     color_cond_dim           = len(np.load(path_cond, allow_pickle=True)["colors_old" if color_cond_type=="one_hot" else "colors"][1])
     cluster_cond_dim         = 10
     txt_cond_dim             = len(np.load(path_cond, allow_pickle=True)["txts" if txt_cond_type=="rnn" else "txt_embs"][1])
@@ -128,7 +130,8 @@ def main():
 
     #pipeline
     bg = batch_cond_spm(path_data, path_cond, spm, batch_size,
-                        color_cond_type, txt_cond_type)
+                        color_cond_type, txt_cond_type,
+                        txt_len_min, txt_len_max)
     data = pipe(lambda: bg, (tf.float32, tf.float32, tf.float32, tf.float32),
                 (tf.TensorShape([None, None, None, None]),
                  tf.TensorShape([None, None]),

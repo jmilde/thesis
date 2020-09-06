@@ -180,16 +180,18 @@ class INTROVAE(tf.keras.Model):
 
         if self.auxilary:
             # TODO input mu_r_??
-            loss_aux, pred_r, pred_p = self.auxilary_loss(dec_mu_p, dec_mu_r,
-                                          color_label=colors,
-                                          cluster_label=clusters,
-                                          txt_label=txts,
-                                          training=training)
+            loss_aux, pred_cl_r, pred_cl_p, pred_color_r, pred_color_p = self.auxilary_loss(
+                dec_mu_p, dec_mu_r,
+                color_label=colors,
+                cluster_label=clusters,
+                txt_label=txts,
+                training=training)
             loss_aux = self.weight_aux * loss_aux
             loss_enc += loss_aux
             loss_dec += loss_aux
         else:
             loss_aux = 0
+            pred_cl_r, pred_cl_p, pred_color_r, pred_color_p = None,None,None,None
 
         return {"x"            : x,
                 "z_p"          : z_p,
@@ -206,8 +208,10 @@ class INTROVAE(tf.keras.Model):
                 "loss_enc_adv" : loss_enc_adv,
                 "loss_dec_adv" : loss_dec_adv,
                 "loss_aux"     : loss_aux,
-                "pred_r"       : pred_r,
-                "pred_p"       : pred_p}
+                "pred_cl_r"    : pred_cl_r,
+                "pred_cl_p"    : pred_cl_p,
+                "pred_color_r" : pred_color_r,
+                "pred_color_p" : pred_color_p}
 
 
     @tf.function(experimental_relax_shapes=True)
@@ -258,6 +262,10 @@ class Auxilary_loss(tf.keras.layers.Layer):
     def call(self, z_p, z_r, color_label=None, cluster_label=None, txt_label=None, training=False):
         loss_aux = 0
         mean = 0
+        c_r_cluster = None
+        c_p_cluster = None
+        c_r_color = None
+        c_p_color = None
         if self.color_cond_type=="one_hot":
             c_r_color   = self.dense_color(z_r)
             c_p_color   = self.dense_color(z_p)
@@ -271,6 +279,8 @@ class Auxilary_loss(tf.keras.layers.Layer):
         #if self.txt_cond_type:
         #    c_r = self.dense_aux_txt(dec_mu_r)
         #    c_p = self.dense_aux_txt(dec_mu_p)
+        c_r_cluster = None
+        c_p_cluster = None
         if self.cluster_cond_type:
             c_r_cluster   = self.softmax(self.dense_cluster(z_r))
             c_p_cluster   = self.softmax(self.dense_cluster(z_p))
@@ -279,7 +289,7 @@ class Auxilary_loss(tf.keras.layers.Layer):
             loss_aux      += (aux_r_cluster + aux_p_cluster)/2
             mean          += 1
         loss_aux= tf.reduce_mean(loss_aux)/mean
-        return loss_aux, c_r_cluster, c_p_cluster
+        return loss_aux, c_r_cluster, c_p_cluster, c_r_color, c_p_color
 
 
 class Encoder(tf.keras.layers.Layer):

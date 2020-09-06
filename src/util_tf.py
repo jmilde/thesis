@@ -25,10 +25,11 @@ def batch_cond_spm(path_imgs, path_cond, spm, batch_size, cond_type_color="old",
     """
 
     color_cond = "colors_old" if cond_type_color=="one_hot" else "colors"
-    txt_len = list(map(len,  np.load(path_cond, allow_pickle=True)["txts"]))
+    txt_len = np.array(list(map(len,  np.load(path_cond, allow_pickle=True)["txts"])))
     txt_cond = "txts" if cond_type_txt=="rnn" else  "txt_embs"
-    cluster_cond = "res_cluster" if cond_cluster_type=="vgg" else ""
-    one_hot  = np.eye(10, dtype="float32") if cond_cluster_type=="vgg" else np.eye(1)
+    cluster_cond = "res_cluster" if cond_cluster_type=="vgg" else "res_cluster"
+    one_hot  = np.eye(10, dtype="float32") if cond_cluster_type=="vgg" else np.eye(10)
+    no_txt = True if (("only" in path_imgs) or ("lld" in path_imgs)) else False
 
     colors = np.load(path_cond, allow_pickle=True)[color_cond]
     txts   = np.load(path_cond, allow_pickle=True)[txt_cond]
@@ -42,7 +43,7 @@ def batch_cond_spm(path_imgs, path_cond, spm, batch_size, cond_type_color="old",
                    vpack(t, (batch_size, max(map(len,t))), fill=1,  dtype="float32"),
                    one_hot[np.array(cl)])
             i, c, t, cl = [], [], [], []
-        if txt_len_min<=txt_len[j]<=txt_len_max:
+        if (txt_len_min<=txt_len[j]<=txt_len_max) or no_txt:
             i.append(io.imread(os.path.join(path_imgs, f"{j}.png"))/255)
             c.append(colors[j])
             cl.append(cluster[j])

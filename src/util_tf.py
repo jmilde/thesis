@@ -27,7 +27,7 @@ def batch_cond_spm(path_imgs, path_cond, spm, batch_size, cond_type_color="old",
     color_cond = "colors_old" if cond_type_color=="one_hot" else "colors"
     txt_len = list(map(len,  np.load(path_cond, allow_pickle=True)["txts"]))
     txt_cond = "txts" if cond_type_txt=="rnn" else  "txt_embs"
-    cluster_cond = "res_cluster" if cond_cluster_type=="vgg" else ""
+    cluster_cond = "res_cluster" if cond_cluster_type=="vgg" else "res_cluster"
     one_hot  = np.eye(10, dtype="float32") if cond_cluster_type=="vgg" else np.eye(1)
 
     colors = np.load(path_cond, allow_pickle=True)[color_cond]

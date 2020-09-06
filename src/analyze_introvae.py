@@ -17,6 +17,7 @@ from src.fid import calculate_frechet_distance
 from src.prep_fid import calc_and_save_reference
 from skimage.io import imsave
 import math
+import pandas as pd
 
 def generate_imgs(model, data, path_fid_data, model_name, fid_samples_nr, batch_size, training=False):
     bn = "bn" if training else ""
@@ -425,3 +426,20 @@ def plot_text_condtionals(path, max_len=10, min_len=1):
     plt.ylabel("count")
     plt.xlabel("length")
     plt.show()
+
+path = "./docs/training_plot.csv"
+def plot_training_stats(path):
+    data =  pd.read_csv(path)
+    t=data["Step"]
+    with plt.style.context("default"):
+        plt.plot(t, data["kl_fake"], label="KLD fake")
+        plt.plot(t, data["kl_real"], label="KLD real")
+        plt.plot(t, data["kl_rec"], label="KLD rec.")
+        plt.plot(t, data["loss_rec"], label="rec. loss")
+        plt.plot([0,230000], [110,110], 'b', label="margin")
+        plt.ylim(50,500)
+        plt.xlim(0,230000)
+        plt.ylabel("loss")
+        plt.xlabel("training step")
+        plt.legend(bbox_to_anchor=(1, 1), loc='bottom left')
+        plt.show()

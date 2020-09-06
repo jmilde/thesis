@@ -107,7 +107,7 @@ def main():
         modeltype = f"INTRO_{dataset}{norm}_{p['epochs']}-m{m_plus}-lr{lr_enc}b1{beta1}b2{beta2}-w_rec{weight_rec}-w_neg{weight_neg}"
     else:
         modeltype = f"VAE{p['vae_epochs']}-b1{beta1}b2{beta2}"
-    txt_info   = f"txt:({txt_cond_type}-dense{cond_dim_txts}-rnn{rnn_dim}-emb{emb_dim})-"  if txt_cond_type else ""
+    txt_info   = f"txt:({txt_cond_type}-dense{cond_dim_txts}-rnn{rnn_dim}-emb{emb_dim}-{txt_len_min}<{txt_len_max})-"  if txt_cond_type else ""
     color_info = f"color:({color_cond_type}{cond_dim_color})-" if color_cond_type else ""
     cluster_info = f"cluster:({cluster_cond_type}{cond_dim_clusters})-" if cluster_cond_type else ""
     cond_info = f"{cond_model}-" if cond_model else ""

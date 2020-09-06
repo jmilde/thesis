@@ -191,6 +191,7 @@ class INTROVAE(tf.keras.Model):
             loss_dec += loss_aux
         else:
             loss_aux = 0
+            pred_cl_r, pred_cl_p, pred_color_r, pred_color_p = None,None,None,None
 
         return {"x"            : x,
                 "z_p"          : z_p,

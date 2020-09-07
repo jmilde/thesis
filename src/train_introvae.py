@@ -203,7 +203,7 @@ def main():
                     with writer.as_default():
                         tf.summary.trace_export(name="introvae_vae", step=0, profiler_outdir=path_log)
                     run_tests(model, writer,example_data[0][:4], example_data[1][:4],
-                              example_data[2][:4], spm, btlnk,
+                              example_data[2][:4], example_data[3][:4], spm, btlnk,
                               img_dim, batch_size=16, step=step,)
 
 
@@ -223,11 +223,13 @@ def main():
                          tf.summary.scalar("vae_loss_kl"  , output["loss_kl"].numpy()  , step=step)
                 if step%(logfrq*10)==0:
                     run_tests(model, writer,example_data[0][:4], example_data[1][:4],
-                              example_data[2][:4], spm, btlnk,
+                              example_data[2][:4], example_data[3][:4], spm, btlnk,
                               img_dim, batch_size=16, step=step,)
 
         save_path = manager.save()
         print("\nsaved VAE-model\n")
+        calculate_scores(model, data, writer, path_fid, path_inception, model_name, batch_size,
+                     fid_samples_nr, path_fid_dataset)
 
 
     # manager for intravae training
@@ -237,63 +239,63 @@ def main():
 
     # training and logging
     step=0
-
-    for epoch in trange(epochs, desc="epochs", position=0):
-        for _ in trange(ds_size//batch_size, desc="steps in epochs", position=1, leave=False):
-            ckpt.step.assign_add(1)
-            step+=1 #using ckpt.step leads to memory leak
-            output = model.train(*next(data))
-            # get graph
-            if step==1 and not vae_epochs:
-                with writer.as_default():
-                    tf.summary.trace_export(name="introvae", step=0, profiler_outdir=path_log)
-                run_tests(model, writer,example_data[0][:4], example_data[1][:4],
-                          example_data[2][:4], example_data[3][:4], spm, btlnk,
-                          img_dim, batch_size=16, step=step,)
-            # logging
-            if step%logfrq==0:
-                with writer.as_default():
-                    tf.summary.image( "overview",
-                                      spread_image(
-                                          np.concatenate((output["x"].numpy()[:3],
-                                                          output["x_r"].numpy()[:3],
-                                                          output["x_p"].numpy()[:3]),
-                                                    axis=0),
-                                          3,3,img_dim[0],img_dim[1]),
-                                      step=step)
-                    tf.summary.image( "x",
-                                      spread_image(output["x"].numpy()[:16],
-                                                   4,4,img_dim[0],img_dim[1]),
-                                      step=step)
-                    tf.summary.image( "x_r",
-                                      spread_image(output["x_r"].numpy()[:16],
-                                                   4,4,img_dim[0],img_dim[1]),
-                                      step=step)
-                    tf.summary.image( "x_p",
-                                      spread_image(output["x_p"].numpy()[:16],
-                                                   4,4,img_dim[0],img_dim[1]),
-                                      step=step)
-                    tf.summary.scalar("loss_enc" , output["loss_enc"].numpy() , step=step)
-                    tf.summary.scalar("loss_dec" , output["loss_dec"].numpy() , step=step)
-                    tf.summary.scalar("loss_rec" , output["loss_rec"].numpy() , step=step)
-                    tf.summary.scalar("mu"       , output["mu"].numpy()       , step=step)
-                    tf.summary.scalar("lv"       , output["lv"].numpy()       , step=step)
-                    tf.summary.scalar("kl_real"  , output["kl_real"].numpy()  , step=step)
-                    tf.summary.scalar("kl_fake"  , output["kl_fake"].numpy()  , step=step)
-                    tf.summary.scalar("kl_rec"   , output["kl_rec"].numpy()   , step=step)
-                    tf.summary.scalar("loss_enc_adv" , output["loss_enc_adv"].numpy()  , step=step)
-                    tf.summary.scalar("loss_dec_adv" , output["loss_dec_adv"].numpy()  , step=step)
-                    if model.auxilary:
-                        tf.summary.scalar("loss_aux" , output["loss_aux"].numpy()  , step=step)
-                    writer.flush()
-            if step%(logfrq*10)==0:
-                 run_tests(model, writer,example_data[0][:4], example_data[1][:4],
+    if epochs:
+        for epoch in trange(epochs, desc="epochs", position=0):
+            for _ in trange(ds_size//batch_size, desc="steps in epochs", position=1, leave=False):
+                ckpt.step.assign_add(1)
+                step+=1 #using ckpt.step leads to memory leak
+                output = model.train(*next(data))
+                # get graph
+                if step==1 and not vae_epochs:
+                    with writer.as_default():
+                        tf.summary.trace_export(name="introvae", step=0, profiler_outdir=path_log)
+                    run_tests(model, writer,example_data[0][:4], example_data[1][:4],
                               example_data[2][:4], example_data[3][:4], spm, btlnk,
                               img_dim, batch_size=16, step=step,)
+                # logging
+                if step%logfrq==0:
+                    with writer.as_default():
+                        tf.summary.image( "overview",
+                                          spread_image(
+                                              np.concatenate((output["x"].numpy()[:3],
+                                                              output["x_r"].numpy()[:3],
+                                                              output["x_p"].numpy()[:3]),
+                                                        axis=0),
+                                              3,3,img_dim[0],img_dim[1]),
+                                          step=step)
+                        tf.summary.image( "x",
+                                          spread_image(output["x"].numpy()[:16],
+                                                       4,4,img_dim[0],img_dim[1]),
+                                          step=step)
+                        tf.summary.image( "x_r",
+                                          spread_image(output["x_r"].numpy()[:16],
+                                                       4,4,img_dim[0],img_dim[1]),
+                                          step=step)
+                        tf.summary.image( "x_p",
+                                          spread_image(output["x_p"].numpy()[:16],
+                                                       4,4,img_dim[0],img_dim[1]),
+                                          step=step)
+                        tf.summary.scalar("loss_enc" , output["loss_enc"].numpy() , step=step)
+                        tf.summary.scalar("loss_dec" , output["loss_dec"].numpy() , step=step)
+                        tf.summary.scalar("loss_rec" , output["loss_rec"].numpy() , step=step)
+                        tf.summary.scalar("mu"       , output["mu"].numpy()       , step=step)
+                        tf.summary.scalar("lv"       , output["lv"].numpy()       , step=step)
+                        tf.summary.scalar("kl_real"  , output["kl_real"].numpy()  , step=step)
+                        tf.summary.scalar("kl_fake"  , output["kl_fake"].numpy()  , step=step)
+                        tf.summary.scalar("kl_rec"   , output["kl_rec"].numpy()   , step=step)
+                        tf.summary.scalar("loss_enc_adv" , output["loss_enc_adv"].numpy()  , step=step)
+                        tf.summary.scalar("loss_dec_adv" , output["loss_dec_adv"].numpy()  , step=step)
+                        if model.auxilary:
+                            tf.summary.scalar("loss_aux" , output["loss_aux"].numpy()  , step=step)
+                        writer.flush()
+                if step%(logfrq*10)==0:
+                     run_tests(model, writer,example_data[0][:4], example_data[1][:4],
+                                  example_data[2][:4], example_data[3][:4], spm, btlnk,
+                                  img_dim, batch_size=16, step=step,)
 
-        # save model every epoch
-        save_path = manager.save()
-        print(f"\nsaved model after epoch {epoch}\n")
+            # save model every epoch
+            save_path = manager.save()
+            print(f"\nsaved model after epoch {epoch}\n")
 
     # calcualte Scores
     calculate_scores(model, data, writer, path_fid, path_inception, model_name, batch_size,

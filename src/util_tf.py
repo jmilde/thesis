@@ -23,32 +23,34 @@ def batch_cond_spm(path_imgs, path_cond, spm, batch_size, cond_type_color="old",
     """batch function to use with pipe
     cond_type_color = 'one_hot' or 'continuous'
     """
+    no_txt = True if (("only" in path_imgs) or ("lld" in path_imgs)) else False
 
     color_cond = "colors_old" if cond_type_color=="one_hot" else "colors"
-    txt_len = np.array(list(map(len,  np.load(path_cond, allow_pickle=True)["txts"])))
+    txt_len = list(map(len,  np.load(path_cond, allow_pickle=True)["txts"]))
+    relevant_idxs = [i for i,l in enumerate(txt_len) if (txt_len_min<=l<=txt_len_max) or no_txt]
     txt_cond = "txts" if cond_type_txt=="rnn" else  "txt_embs"
     cluster_cond = "res_cluster" if cond_cluster_type=="vgg" else "res_cluster"
     one_hot  = np.eye(10, dtype="float32") if cond_cluster_type=="vgg" else np.eye(10)
-    no_txt = True if (("only" in path_imgs) or ("lld" in path_imgs)) else False
 
     colors = np.load(path_cond, allow_pickle=True)[color_cond]
     txts   = np.load(path_cond, allow_pickle=True)[txt_cond]
     cluster= np.load(path_cond, allow_pickle=True)[cluster_cond]
 
     i, c, t, cl = [], [], [], []
-    for j in sample(len(colors), seed):
+    for idx in sample(len(relevant_idxs), seed):
+        j = relevant_idxs[idx]
         if batch_size == len(i):
             yield (np.array(i, dtype="float32"),
                    np.array(c, dtype="float32"),
                    vpack(t, (batch_size, max(map(len,t))), fill=1,  dtype="float32"),
                    one_hot[np.array(cl)])
             i, c, t, cl = [], [], [], []
-        if (txt_len_min<=txt_len[j]<=txt_len_max) or no_txt:
-            i.append(io.imread(os.path.join(path_imgs, f"{j}.png"))/255)
-            c.append(colors[j])
-            cl.append(cluster[j])
-            txt = spm.encode_as_ids(txts[j]) if cond_type_txt=="rnn" else txts[j]
-            t.append(txt)
+
+        i.append(io.imread(os.path.join(path_imgs, f"{j}.png"))/255)
+        c.append(colors[j])
+        cl.append(cluster[j])
+        txt = spm.encode_as_ids(txts[j]) if cond_type_txt=="rnn" else txts[j]
+        t.append(txt)
 
 
 

@@ -99,16 +99,18 @@ class INTROVAE(tf.keras.Model):
         else:
             return tf.reduce_sum(x)+0.0
 
-    def vae_step(self, x, colors, txts, training=True):
-        x = self.noise_img(self.inpt_layer(x), training=training)
-        x_txt = self.inpt_layer_txt(txts) if self.txt_cond_type else None
-        x_color = self.inpt_layer_cond(colors) if self.color_cond_type else None
+    def vae_step(self, x, colors, txts, clusters, training=True):
+        x         = self.inpt_layer(x)
+        x_txt     = self.inpt_layer_txt(txts) if self.txt_cond_type else None
+        x_color   = self.inpt_layer_color(colors) if self.color_cond_type else None
+        x_cluster = self.inpt_layer_cluster(clusters) if self.cluster_cond_type else None
 
         # encode
-        z, mu, lv = self.encode(x, training=training)  # encode real image
+        z, mu, lv = self.encode(x, x_color, x_txt, x_cluster, training=training)  # encode real image
 
         # decode
-        x_rec = self.decode(z, x_color, x_txt, training=training)  # reconstruct real image
+        x_rec     = self.decode(z, x_color, x_txt, x_cluster, training=training)  # reconstruct real image
+
 
         # kl loss
         loss_kl = self.kl_loss(mu, lv)
@@ -125,11 +127,14 @@ class INTROVAE(tf.keras.Model):
                 "loss_rec": loss_rec}
 
     @tf.function(experimental_relax_shapes=True)
-    def train_vae(self, x, colors, txts):
+    def train_vae(self, x, colors, txts, clusters):
         with tf.GradientTape() as tape:
-            output = self.vae_step(x, colors, txts, training=True)
+            output = self.vae_step(x, colors, txts, clusters, training=True)
             loss = output["loss"]
-        self.optimizer_enc.apply_gradients(zip(tape.gradient(loss, self.trainable_variables), self.trainable_variables))
+        variables = self.trainable_variables
+        if self.cond_model:
+            variables += self.conditional_embedder.trainable_variables
+        self.optimizer_enc.apply_gradients(zip(tape.gradient(loss, variables), variables))
         return output
 
 

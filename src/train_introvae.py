@@ -130,7 +130,7 @@ def main():
 
     #pipeline
     bg = batch_cond_spm(path_data, path_cond, spm, batch_size,
-                        color_cond_type, txt_cond_type,
+                        color_cond_type, txt_cond_type, cluster_cond_type,
                         txt_len_min, txt_len_max)
     data = pipe(lambda: bg, (tf.float32, tf.float32, tf.float32, tf.float32),
                 (tf.TensorShape([None, None, None, None]),

@@ -10,7 +10,7 @@ params = {
         "path_spm": expanduser("~/data/logo_vocab"),
         "path_fid": expanduser("~/data/fid/"),
 
-        "restore_model":False, #empty or modelname for model stored at path_ckpt
+        "restore_model":True, #empty or modelname for model stored at path_ckpt
 
         # Data info
         "img_dim": [256,256,3],
@@ -27,7 +27,7 @@ params = {
         "noise_img": 0.1,
 
         # training
-        "vae_epochs": 50, # pretrain only vae
+        "vae_epochs": 0, # pretrain only vae
         "epochs": 0,
         "batch_size": 16,
         "logs_per_epoch": 100,  # log ~100x per epoch
@@ -72,11 +72,11 @@ params = {
 
     "train":{
         "gpu": 0,
-        "dataset": "lld", # "all" "only"
+        "dataset": "all", # "all" "only"
         "restore_model":False, #empty or modelname for model stored at path_ckpt
-        "cond_model": "enc_dec", # None, "dec"
-        "auxilary": True,
-        "color_cond_type": "one_hot", #"one_hot", # "continuous"
+        "cond_model": None, # None, "dec", "enc_dec"
+        "auxilary": False,
+        "color_cond_type": None, #"one_hot", # "continuous"
         "txt_cond_type": None, #"rnn" #"bert"
         "cluster_cond_type": None, #"vgg"
         "txt_len_min":0,
@@ -100,12 +100,13 @@ params = {
 
         # training
         "vae_epochs": 0, # pretrain only vae
-        "epochs": 276, #lld:276, all:20, only:115
+        "epochs": 0, #lld:276, all:20, only:115 ,txt:50
         "batch_size": 60,
         "logs_per_epoch": 100,  # log ~100x per epoch
         "fid_samples_nr": 25000,
-        'normalizer_enc': "batch", #None "instance" "batch" "group" "layer"
-        'normalizer_dec': "batch", #None "instance" "batch" "group" "layer"
+        "plot_bn"       : False,
+        'normalizer_enc': "layer", #None "instance" "batch" "group" "layer"
+        'normalizer_dec': "layer", #None "instance" "batch" "group" "layer"
 
         ### loss weights
         "weight_rec": 0.25, # beta: og:0.5, 0.01 - 100, larger β improves reconstruction quality but may influence sample diversity

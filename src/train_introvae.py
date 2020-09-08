@@ -76,6 +76,7 @@ def main():
     auxilary                 = p["auxilary"]
     txt_len_min              = p["txt_len_min"]
     txt_len_max              = p["txt_len_max"]
+    plot_bn                  = p["plot_bn"]
     color_cond_dim           = len(np.load(path_cond, allow_pickle=True)["colors_old" if color_cond_type=="one_hot" else "colors"][1])
     cluster_cond_dim         = 10
     txt_cond_dim             = len(np.load(path_cond, allow_pickle=True)["txts" if txt_cond_type=="rnn" else "txt_embs"][1])
@@ -299,7 +300,7 @@ def main():
 
     # calcualte Scores
     calculate_scores(model, data, writer, path_fid, path_inception, model_name, batch_size,
-                     fid_samples_nr, path_fid_dataset)
+                     fid_samples_nr, path_fid_dataset, plot_bn)
 
 
 

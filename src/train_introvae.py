@@ -68,15 +68,16 @@ def main():
     noise_color              = p['noise_color']
     noise_txt                = p['noise_txt']
     noise_img                = p['noise_img']
-    ds_size                  = len(np.load(path_cond, allow_pickle=True)["colors"])
+    txt_len_min              = p["txt_len_min"]
+    txt_len_max              = p["txt_len_max"]
+    ds_size                  = len([l for l
+                                in list(map(len,  np.load(path_cond, allow_pickle=True)["txts"]))
+                                if (txt_len_min<=l<=txt_len_max)])
     color_cond_type          = p['color_cond_type']
     cluster_cond_type        = p['cluster_cond_type']
     txt_cond_type            = p['txt_cond_type']
     fid_samples_nr           = p["fid_samples_nr"]
     auxilary                 = p["auxilary"]
-    txt_len_min              = p["txt_len_min"]
-    txt_len_max              = p["txt_len_max"]
-    plot_bn                  = p["plot_bn"]
     color_cond_dim           = len(np.load(path_cond, allow_pickle=True)["colors_old" if color_cond_type=="one_hot" else "colors"][1])
     cluster_cond_dim         = 10
     txt_cond_dim             = len(np.load(path_cond, allow_pickle=True)["txts" if txt_cond_type=="rnn" else "txt_embs"][1])

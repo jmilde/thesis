@@ -170,7 +170,7 @@ def run_tests(model, writer, img_embs, colors, txts, clusters, spm, btlnk, img_d
 
             # text exploration
             if model.txt_cond_type:
-                txt_samples = ["firma name", "G", "A",  "kaltes bier", "vogel", "bird", "pelikan", "imperceptron", "albatros coding", "tree leaves", "nice coffee", "german engineering", "abcdef ghij", "klmnopq", "rstu vwxyz", "0123456789"]
+                txt_samples = ["eggcellent", "easyBee", "aircoustic",  "zoneco", "vogel", "bird", "pelikan", "imperceptron", "albatros coding", "tree leaves", "nice coffee", "german engineering", "abcdef ghij", "klmnopq", "rstu vwxyz", "0123456789"]
                 cond_color= None
                 if model.color_cond_type:
                     cond_color = np.repeat(color[np.newaxis, :], batch_size, axis=0)

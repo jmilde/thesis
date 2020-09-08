@@ -21,6 +21,7 @@ import pandas as pd
 
 def generate_imgs(model, data, path_fid_data, model_name, fid_samples_nr, batch_size, training=False):
     bn = "bn" if training else ""
+    modeltype = "intro" if "intro" in model_name.lower() else "vae"
 
     img_path = os.path.join(path_fid_data, f"imgs{bn}")
     print("save imgs to ", img_path)
@@ -31,8 +32,12 @@ def generate_imgs(model, data, path_fid_data, model_name, fid_samples_nr, batch_
     imgs, colors, txts, clusters = [], [], [], []
     for _ in tqdm(range(math.ceil(fid_samples_nr//batch_size+1))):
         img, color, txt, cluster = next(data)
-        output = model.call(img, color, txt, cluster, training=training)
-        imgs_array = output["x_p"].numpy()
+        if modeltype=="intro":
+            output = model.call(img, color, txt, cluster, training=training)
+            imgs_array = output["x_p"].numpy()
+        else:
+            z = np.random.normal(0,1,(batch_size, 256))
+            imgs_array = model.decode(z, color, txt, cluster, training=training).numpy()
         imgs.extend(imgs_array)
         for img in imgs_array:
             if sample_nr<=fid_samples_nr:

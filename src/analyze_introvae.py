@@ -1,10 +1,11 @@
+from skimage import io
 from datetime import datetime
 from collections import Counter
 from matplotlib import pyplot as plt
 from os.path import expanduser
 from src.models.introvae import INTROVAE
 from src.util_io import pform
-from src.util_np import np, vpack
+from src.util_np import np, vpack, sample
 from src.util_sp import load_spm
 from src.util_tf import batch_cond_spm, pipe, spread_image
 from tqdm import trange, tqdm
@@ -45,17 +46,85 @@ def generate_imgs(model, data, path_fid_data, model_name, fid_samples_nr, batch_
                                     f"{sample_nr}.png"),
                        np.clip(img*255, a_min=0, a_max=255).astype("uint8"))
                 sample_nr += 1
-                colors.append(color)
-                txts.append(txt)
-                clusters.append(cluster)
+                if model.color_cond_type:
+                    colors.append(color)
+                if model.txt_cond_type:
+                    txts.append(txt)
+                if model.cluster_cond_type:
+                    clusters.append(cluster)
             else:
                 break
     print("saving conditionals")
-    np.savez_compressed(os.path.join(path_fid_data, f"conditionals{bn}.npz"),
-                        colors= colors,
-                        txts = txts,
-                        clusters = clusters)
+    try:
+        np.savez_compressed(os.path.join(path_fid_data, f"conditionals{bn}.npz"),
+                            colors= colors,
+                            txts = txts,
+                            clusters = clusters)
+    except:
+        print(colors, txts, clusters)
     return imgs
+
+def mssim_dataset(path_imgs, path_cond, spm, batch_size, cond_type_color="old",
+                   cond_type_txt="bert", cond_cluster_type="vgg",
+                   txt_len_min=0, txt_len_max=9999, seed=26):
+    """batch function to use with pipe
+    cond_type_color = 'one_hot' or 'continuous'
+    """
+    no_txt = True if (("only" in path_imgs) or ("lld" in path_imgs)) else False
+
+    color_cond = "colors_old" if cond_type_color=="one_hot" else "colors"
+    txt_len = list(map(len,  np.load(path_cond, allow_pickle=True)["txts"]))
+    relevant_idxs = [i for i,l in enumerate(txt_len) if (txt_len_min<=l<=txt_len_max) or no_txt]
+    print("getting imgs")
+    i = []
+    for l in sample(len(relevant_idxs), seed):
+        if len(i)==50000:
+            break
+        j = relevant_idxs[l]
+        i.append(io.imread(os.path.join(path_imgs, f"{j}.png")))
+    print("calculating mssim")
+    ms_ssim=calc_mssim(np.array(i))
+    print(f"mssim dataset: {ms_ssim}")
+
+
+def calc_mssim(imgs):
+    with tf.device('/CPU:0'):
+
+        x = []
+        for a,b in zip(np.array_split(imgs[:len(imgs)//2], 5),
+                       np.array_split(imgs[len(imgs)//2:], 5)):
+            x.extend( tf.image.ssim_multiscale(a,
+                                               b,
+                                               255,
+                                               filter_size=8))
+        ms_ssim = tf.math.reduce_mean(x)
+    return ms_ssim
+
+def fid_dataset():
+    fid_path=expanduser("~/data/fid/")
+    calc_and_save_reference(expanduser("~/data/lld_boosted"),
+                            os.path.join(fid_path, "lld_fid_sample.npz"),
+                            inception_path=path_inception,
+                            nr_samples=50000)
+    mu1= np.load(os.path.join(fid_path, f"lld_fid_sample.npz"), allow_pickle=True)["mu"]
+    sigma1= np.load(os.path.join(fid_path, f"lld_fid_sample.npz"), allow_pickle=True)["sigma"]
+    mu2= np.load(os.path.join(fid_path, path_fid_dataset), allow_pickle=True)["mu"]
+    sigma2= np.load(os.path.join(fid_path, path_fid_dataset), allow_pickle=True)["sigma"]
+    fid_score = calculate_frechet_distance(mu1, sigma1, mu2, sigma2)
+    print(f"FID SCORE: {fid_score}")
+
+    fid_path=expanduser("~/data/fid/")
+    calc_and_save_reference(expanduser("~/data/imgs"),
+                            os.path.join(fid_path, "txt_fid_sample.npz"),
+                            inception_path=path_inception,
+                            nr_samples=50000)
+    mu1= np.load(os.path.join(fid_path, f"txt_fid_sample.npz"), allow_pickle=True)["mu"]
+    sigma1= np.load(os.path.join(fid_path, f"txt_fid_sample.npz"), allow_pickle=True)["sigma"]
+    mu2= np.load(os.path.join(fid_path, path_fid_dataset), allow_pickle=True)["mu"]
+    sigma2= np.load(os.path.join(fid_path, path_fid_dataset), allow_pickle=True)["sigma"]
+    fid_score = calculate_frechet_distance(mu1, sigma1, mu2, sigma2)
+    print(f"FID SCORE: {fid_score}")
+
 
 
 def calculate_scores(model, data, writer, path_fid, path_inception, model_name,
@@ -71,14 +140,7 @@ def calculate_scores(model, data, writer, path_fid, path_inception, model_name,
     print("Calculate MS-SSIM Score")
     with tf.device('/CPU:0'):
         imgs = np.clip(np.array(imgs[:50000])*255, 0 , 255)
-        x = []
-        for a,b in zip(np.array_split(imgs[:len(imgs)//2], 5),
-                       np.array_split(imgs[len(imgs)//2:], 5)):
-            x.extend( tf.image.ssim_multiscale(a,
-                                               b,
-                                               255,
-                                               filter_size=8))
-        ms_ssim = tf.math.reduce_mean(x)
+        ms_ssim = calc_mssim(imgs)
         print(f"MS_SSIM: {ms_ssim}")
 
         with writer.as_default():

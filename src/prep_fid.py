@@ -5,10 +5,10 @@ import tensorflow.compat.v1 as tf
 import os
 import glob
 from tqdm import tqdm
+from collections import expanduser
 
 
-
-def calc_and_save_reference(data_path, output_path, inception_path=None):
+def calc_and_save_reference(data_path, output_path, inception_path=None, nr_samples=None):
 
     os.environ['CUDA_VISIBLE_DEVICES'] = '0'
     ########
@@ -24,7 +24,9 @@ def calc_and_save_reference(data_path, output_path, inception_path=None):
 
     # loads all images into memory (this might require a lot of RAM!)
     print("load images..", end=" " , flush=True)
-    image_list = [os.path.join(data_path,fn) for fn in tqdm(os.listdir(data_path))]
+    image_list = np.array([os.path.join(data_path,fn) for fn in tqdm(os.listdir(data_path))])
+    if nr_samples:
+        image_list = image_list[:nr_samples]
 
     print("%d images found and loaded" % len(image_list))
 

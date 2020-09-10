@@ -5,7 +5,7 @@ import tensorflow.compat.v1 as tf
 import os
 import glob
 from tqdm import tqdm
-from collections import expanduser
+from os.path import expanduser
 
 
 def calc_and_save_reference(data_path, output_path, inception_path=None, nr_samples=None):

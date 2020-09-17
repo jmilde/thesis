@@ -124,7 +124,6 @@ def main():
                   f"{','.join(str(x) for x in img_dim)}")
 
 
-
     logfrq = ds_size//logs_per_epoch//batch_size
     path_ckpt  = path_ckpt+model_name
 
@@ -190,7 +189,7 @@ def main():
                                net=model)
 
     if restore_model:
-        manager = tf.train.CheckpointManager(ckpt, path_ckpt, checkpoint_name=model_name, max_to_keep=10)
+        manager = tf.train.CheckpointManager(ckpt, path_ckpt, checkpoint_name=model_name, max_to_keep=1)
         ckpt.restore(manager.latest_checkpoint)
         print(f"\nmodel: {model_name} restored\n")
 
@@ -205,8 +204,8 @@ def main():
             for _ in trange(ds_size//batch_size, desc="steps in epochs", position=1, leave=False):
                 step+=1
                 if step==1:
-                    with writer.as_default():
-                        tf.summary.trace_export(name="introvae_vae", step=0, profiler_outdir=path_log)
+                    #with writer.as_default():
+                    #    tf.summary.trace_export(name="introvae_vae", step=0, profiler_outdir=path_log)
                     run_tests(model, writer,example_data[0][:4], example_data[1][:4],
                               example_data[2][:4], example_data[3][:4], spm, btlnk,
                               img_dim, batch_size=16, step=step,)
@@ -243,7 +242,7 @@ def main():
 
 
     # training and logging
-    step=0
+    step= 0
     if epochs:
         for epoch in trange(epochs, desc="epochs", position=0):
             for _ in trange(ds_size//batch_size, desc="steps in epochs", position=1, leave=False):
@@ -252,8 +251,8 @@ def main():
                 output = model.train(*next(data))
                 # get graph
                 if step==1 and not vae_epochs:
-                    with writer.as_default():
-                        tf.summary.trace_export(name="introvae", step=0, profiler_outdir=path_log)
+                    #with writer.as_default():
+                    #    tf.summary.trace_export(name="introvae", step=0, profiler_outdir=path_log)
                     run_tests(model, writer,example_data[0][:4], example_data[1][:4],
                               example_data[2][:4], example_data[3][:4], spm, btlnk,
                               img_dim, batch_size=16, step=step,)

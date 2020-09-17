@@ -164,6 +164,12 @@ def calculate_scores(model, data, writer, path_fid, path_inception, model_name,
             tf.summary.scalar("FID_score"  , fid_score , step=0)
             writer.flush()
 
+    print("cleaning up")
+    img_path = os.path.join(path_fid_data, f"imgs")
+    for f in os.listdir(img_path):
+        os.remove(os.path.join(img_path, f))
+
+
     if plot_bn:
         print("save 50.000 generated samples WITH BATCHNORM")
         imgs = generate_imgs(model, data, path_fid, model_name,
@@ -201,6 +207,11 @@ def calculate_scores(model, data, writer, path_fid, path_inception, model_name,
             with writer.as_default():
                 tf.summary.scalar("FID_score_BN"  , fid_score , step=0)
                 writer.flush()
+
+        print("cleaning up")
+        img_path = os.path.join(path_fid_data, f"imgsbn")
+        for f in os.listdir(img_path):
+            os.remove(os.path.join(img_path, f))
 
 
 def show_img(img, channel_first=False):
@@ -514,3 +525,49 @@ def plot_training_stats(path):
         plt.xlabel("training step")
         plt.legend(bbox_to_anchor=(1, 1), loc='bottom left')
         plt.show()
+
+
+#path = expanduser("./lldboosted_conditionals.npz")
+#path_out = expanduser("./plot_cluster_lld.png")
+#path_imgs = expanduser("./imgs/")
+
+
+
+path = expanduser("~/data/lldboosted_conditionals.npz")
+path_out = expanduser("~/data/plot.png")
+path_imgs = expanduser("~/data/lld_boosted/")
+def plot_cluster(path, path_imgs, path_out):
+    x=np.load(path, allow_pickle=True)["res_cluster"]
+    #x = [list(a).index(max(a)) for a in np.load(path, allow_pickle=True)["colors_old"]]
+    collect = []
+    ids = []
+    for nr in range(0,10):
+        for i,xx in enumerate(x):
+            if len(collect)==( nr+1)*10:
+                break
+            if nr==xx:
+                ids.append(i)
+                collect.append(io.imread(os.path.join(path_imgs, f"{i}.png"))/255)
+
+    fig, axes= plt.subplots(10, 10)
+    for i, a in enumerate(axes):
+        for j,b in enumerate(a):
+            img = collect[i*10+j]
+            b.imshow(img)
+            b.axes.xaxis.set_visible(False)
+            b.axes.yaxis.set_visible(False)
+            b.spines['top'].set_visible(False)
+            b.spines['right'].set_visible(False)
+            b.spines['bottom'].set_visible(False)
+            b.spines['left'].set_visible(False)
+    plt.savefig(path_out, quality=100)
+
+
+
+
+
+#for value in 1 11 13 35 38 41 42 48 53 84 0 2 5 55 100 110 125 143 147 149 18 40 43 80 85 120 130 139 158 197 7 10 12 25 26 33 61 64 66 69 3 23 24 29 67 70 89 105 115 150 9 14 15 16 37 45 46 54 59 63 20 28 31 62 71 94 108 112 124 138 4 21 27 30 32 36 47 51 56 79 19 22 39 44 49 52 60 65 77 81 6 8 17 34 50 57 58 78 82 88
+#do
+#    scp jack:~/data/lld_boosted/$value.png ./imgs/$value.png
+#done
+#

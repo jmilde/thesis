@@ -82,6 +82,8 @@ def main():
     color_cond_dim           = len(np.load(path_cond, allow_pickle=True)["colors_old" if color_cond_type=="one_hot" else "colors"][1])
     cluster_cond_dim         = 10
     txt_cond_dim             = len(np.load(path_cond, allow_pickle=True)["txts" if txt_cond_type=="rnn" else "txt_embs"][1])
+    model_name = p["model_name"]
+    start_step = p["start_step"]
 
     if not p["normalizer_enc"]:
         norm = "_NONE"
@@ -104,24 +106,26 @@ def main():
         normalizer_enc = tf.keras.layers.LayerNormalization
         normalizer_dec = tf.keras.layers.LayerNormalization
 
-    if p["vae_epochs"] and p["epochs"]:
-        modeltype = f"INTRO{norm}_{p['epochs']}_pre{p['vae_epochs']}-m{m_plus}-b1{beta1}b2{beta2}-w_rec{weight_rec}-w_neg{weight_neg}"
-    elif p["epochs"]:
-        modeltype = f"INTRO_{dataset}{norm}_{p['epochs']}-m{m_plus}-lr{lr_enc}b1{beta1}b2{beta2}-w_rec{weight_rec}-w_neg{weight_neg}"
-    else:
-        modeltype = f"VAE{p['vae_epochs']}-b1{beta1}b2{beta2}"
-    txt_info     = f"txt:({txt_cond_type}-dense{cond_dim_txts}-rnn{rnn_dim}-emb{emb_dim}-{txt_len_min}<{txt_len_max})-"  if txt_cond_type else ""
-    color_info   = f"color:({color_cond_type}{cond_dim_color})-" if color_cond_type else ""
-    cluster_info = f"cluster:({cluster_cond_type}{cond_dim_clusters})-" if cluster_cond_type else ""
-    cond_info    = f"{cond_model}-" if cond_model else ""
-    aux_info     = f"aux-{weight_aux}" if auxilary else ""
-    model_name   = (f"{modeltype}-lr{lr_enc}-z{btlnk}"
-                  f"{aux_info}"
-                  f"{cond_info}"
-                  f"{color_info}"
-                  f"{txt_info}"
-                  f"{cluster_info}"
-                  f"{','.join(str(x) for x in img_dim)}")
+
+    if not model_name:
+        if p["vae_epochs"] and p["epochs"]:
+            modeltype = f"INTRO{norm}_{p['epochs']}_pre{p['vae_epochs']}-m{m_plus}-b1{beta1}b2{beta2}-w_rec{weight_rec}-w_neg{weight_neg}"
+        elif p["epochs"]:
+            modeltype = f"INTRO_{dataset}{norm}_{p['epochs']}-m{m_plus}-lr{lr_enc}b1{beta1}b2{beta2}-w_rec{weight_rec}-w_neg{weight_neg}"
+        else:
+            modeltype = f"VAE{p['vae_epochs']}-b1{beta1}b2{beta2}"
+        txt_info     = f"txt:({txt_cond_type}-dense{cond_dim_txts}-rnn{rnn_dim}-emb{emb_dim}-{txt_len_min}<{txt_len_max})-"  if txt_cond_type else ""
+        color_info   = f"color:({color_cond_type}{cond_dim_color})-" if color_cond_type else ""
+        cluster_info = f"cluster:({cluster_cond_type}{cond_dim_clusters})-" if cluster_cond_type else ""
+        cond_info    = f"{cond_model}-" if cond_model else ""
+        aux_info     = f"aux-{weight_aux}" if auxilary else ""
+        model_name   = (f"{modeltype}-lr{lr_enc}-z{btlnk}"
+                      f"{aux_info}"
+                      f"{cond_info}"
+                      f"{color_info}"
+                      f"{txt_info}"
+                      f"{cluster_info}"
+                      f"{','.join(str(x) for x in img_dim)}")
 
 
     logfrq = ds_size//logs_per_epoch//batch_size
@@ -199,7 +203,7 @@ def main():
 
     if vae_epochs:
         manager = tf.train.CheckpointManager(ckpt, path_ckpt, max_to_keep=10, checkpoint_name=model_name + "_VAEpretrain")
-        step=0
+        step=start_step
         for _ in trange(vae_epochs, desc="epochs", position=0):
             for _ in trange(ds_size//batch_size, desc="steps in epochs", position=1, leave=False):
                 step+=1
@@ -242,7 +246,7 @@ def main():
 
 
     # training and logging
-    step= 0
+    step= start_step
     if epochs:
         for epoch in trange(epochs, desc="epochs", position=0):
             for _ in trange(ds_size//batch_size, desc="steps in epochs", position=1, leave=False):

@@ -21,6 +21,8 @@ from skimage.io import imsave
 import math
 import pandas as pd
 from sklearn import metrics
+
+
 def generate_imgs(model, data, path_fid_data, model_name, fid_samples_nr, batch_size, training=False):
     bn = "bn" if training else ""
     modeltype = "intro" if "intro" in model_name.lower() else "vae"
@@ -84,14 +86,25 @@ def evaluate_one_hot(model, data, writer):
                 samples=  model.decode(z, zeros, None, None,training=True)
                 if j==0:
                     plot.extend(samples[:10])
+
                 imgs = [get_colors_old(l.numpy()*255) for l in samples]
-                pred.extend([list(l).index(max(l)) for l in imgs])
+
+                for l in imgs:
+                    try:
+                        pred.append(list(l).index(max(l)))
+                    except:
+                        pred.append(0)
+                #pred.extend([list(l).index(max(l)) for l in imgs])
             else:
                 samples=  model.decode(z, None, None, zeros)
                 if j==0:
                     plot.extend(samples[:10])
                 imgs = [get_colors_old(l.numpy()*255) for l in samples]
-                pred.extend([list(l).index(max(l)) for l in imgs])
+                for l in imgs:
+                    try:
+                        pred.append(list(l).index(max(l)))
+                    except:
+                        pred.append(0)
 
 
     precision = [round(x,2) for x in metrics.precision_score(labels, pred, average=None)]
@@ -407,12 +420,14 @@ def run_tests(model, writer, img_embs, colors, txts, clusters, spm, btlnk, img_d
                 cond_txt = None
                 if model.txt_cond_type:
                     cond_txt = np.repeat(txt[np.newaxis, :],  color_batchsize , axis=0)
-                cond_cluster=None
+
+                    cond_cluster=None
                 if model.cluster_cond_type:
                     cond_cluster = np.repeat(cluster[np.newaxis, :],  color_batchsize , axis=0)
-                _, x, _ = model.encode(np.repeat(img_emb[np.newaxis, :],  color_batchsize, axis=0),
+                    _, x, _ = model.encode(np.repeat(img_emb[np.newaxis, :],  color_batchsize, axis=0),
                                        cond_color, cond_txt, cond_cluster)
-                x_color.extend(model.decode(x, cond_color, cond_txt, cond_cluster))
+
+                x_color.extend(model.decode(x[:color_batchsize], cond_color, cond_txt, cond_cluster))
 
         with writer.as_default():
             tf.summary.image( "change_x",

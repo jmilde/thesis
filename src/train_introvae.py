@@ -13,10 +13,15 @@ from datetime import datetime
 import os
 from os.path import expanduser
 from src.hyperparameter import params
-
+import argparse
 
 def main():
-    p = params["train"]
+    parser = argparse.ArgumentParser()
+    parser.add_argument("model", type=str, nargs='?')
+    parser.add_argument("iteration", type=str, nargs='?')
+    args = parser.parse_args()
+    iteration= args.iteration or "last"
+    p = params[args.model or "train_0"]
     SEED= 27
 
 
@@ -83,7 +88,6 @@ def main():
     cluster_cond_dim         = 10
     txt_cond_dim             = len(np.load(path_cond, allow_pickle=True)["txts" if txt_cond_type=="rnn" else "txt_embs"][1])
     model_name = p["model_name"]
-    start_step = p["start_step"]
 
     if not p["normalizer_enc"]:
         norm = "_NONE"
@@ -202,8 +206,8 @@ def main():
     example_data=next(data)
 
     if vae_epochs:
-        manager = tf.train.CheckpointManager(ckpt, path_ckpt, max_to_keep=10, checkpoint_name=model_name + "_VAEpretrain")
-        step=start_step
+        manager = tf.train.CheckpointManager(ckpt, path_ckpt, max_to_keep=1, checkpoint_name=model_name + "_VAEpretrain")
+        step=ckpt.step.numpy()
         for _ in trange(vae_epochs, desc="epochs", position=0):
             for _ in trange(ds_size//batch_size, desc="steps in epochs", position=1, leave=False):
                 step+=1
@@ -241,12 +245,13 @@ def main():
 
 
     # manager for intravae training
-    manager = tf.train.CheckpointManager(ckpt, path_ckpt, max_to_keep=10, checkpoint_name=model_name)
+    if not restore_model:
+        manager = tf.train.CheckpointManager(ckpt, path_ckpt, max_to_keep=1, checkpoint_name=model_name)
 
 
 
     # training and logging
-    step= start_step
+    step= ckpt.step.numpy()
     if epochs:
         for epoch in trange(epochs, desc="epochs", position=0):
             for _ in trange(ds_size//batch_size, desc="steps in epochs", position=1, leave=False):
@@ -305,9 +310,11 @@ def main():
             save_path = manager.save()
             print(f"\nsaved model after epoch {epoch}\n")
 
-    # calcualte Scores
-    calculate_scores(model, data, writer, path_fid, path_inception, model_name, batch_size,
-                     fid_samples_nr, path_fid_dataset, plot_bn)
+
+    if iteration == "last":
+        # calcualte Scores
+        calculate_scores(model, data, writer, path_fid, path_inception, model_name, batch_size,
+                         fid_samples_nr, path_fid_dataset, plot_bn)
 
 
 

@@ -21,6 +21,7 @@ from skimage.io import imsave
 import math
 import pandas as pd
 from sklearn import metrics
+from skimage.io import imsave
 
 
 def generate_imgs(model, data, path_fid_data, model_name, fid_samples_nr, batch_size, training=False):
@@ -83,7 +84,7 @@ def evaluate_one_hot(model, data, writer):
             if model.color_cond_type=="one_hot":
                 #for l in model.decode(z, zeros, None, None ):
                 #    print(l)
-                samples=  model.decode(z, zeros, None, None,training=True)
+                samples=  model.decode(z, zeros, None, None,training=False)
                 if j==0:
                     plot.extend(samples[:10])
 
@@ -125,12 +126,20 @@ def evaluate_one_hot(model, data, writer):
         print(f"{c} & {p} & {r} & {f} \\\\")
     print(f"mean & {p_mean} & {r_mean} & {f1_mean} \\\\")
 
+    print("spread image")
+    i = spread_image(np.array(plot),10,11,128,128)
+    print("save img")
+    imsave(expanduser("/home/users/jmilde/data/imgsplot.png"), np.clip(np.array(i[0])*255, a_min=0, a_max=255))
+
+    print("write to tensorboard")
     with writer.as_default():
         tf.summary.image("one-hot-exploration", spread_image(np.array(plot),10,11,128,128), step=3)
         tf.summary.scalar("recall"  , round(r_mean,2) , step=0)
         tf.summary.scalar("f1"  , round(f1_mean,2) , step=0)
         tf.summary.scalar("precision"  , round(p_mean,2) , step=0)
         writer.flush()
+
+    print("Done")
 
 
 
@@ -282,7 +291,7 @@ def calculate_scores(model, data, writer, path_fid, path_inception, model_name,
         print("cleaning up")
         img_path = os.path.join(path_fid_data, f"imgsbn")
         for f in os.listdir(img_path):
-            os.remove(os.path.join(img_path, f))
+            os.remove(os.path.join(img_path, f))#
 
 
     if model.color_cond_type=="one_hot" or model.cluster_cond_type:

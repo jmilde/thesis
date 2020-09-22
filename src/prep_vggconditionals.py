@@ -8,7 +8,8 @@ from tqdm import tqdm
 def add_resnet_condtionals(path_imgs, path_conditionals):
     with tf.device('/CPU:0'):
         model = tf.keras.applications.VGG16(input_shape=(128,128,3),
-                                            include_top=False)
+                                            include_top=False,
+                                            weights="imagenet")
 
         embeddings = []
         for img in tqdm(os.listdir(path_imgs)):
@@ -32,8 +33,8 @@ def add_resnet_condtionals(path_imgs, path_conditionals):
 def main():
     gpus = tf.config.experimental.list_physical_devices('GPU')
     if gpus:
-        tf.config.experimental.set_visible_devices(gpus[0], 'GPU')
-        tf.config.experimental.set_memory_growth(gpus[0], True)
+        tf.config.experimental.set_visible_devices(gpus[3], 'GPU')
+        tf.config.experimental.set_memory_growth(gpus[3], True)
 
     path_imgs = os.path.expanduser("~/data/imgs/")
     path_conditionals = os.path.expanduser("~/data/eudata_conditionals.npz")
@@ -44,10 +45,6 @@ def main():
     path_conditionals = os.path.expanduser("~/data/lldboosted_conditionals.npz")
     add_resnet_condtionals(path_imgs, path_conditionals)
 
-    print("only logos")
-    path_imgs = os.path.expanduser("~/data/only_logo/") #only_logo lld_boosted
-    path_conditionals = os.path.expanduser("~/data/onlylogo_conditionals.npz") #lldboosted
-    add_resnet_condtionals(path_imgs, path_conditionals)
 
 if __name__=="__main__":
     main()

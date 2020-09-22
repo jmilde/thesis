@@ -97,7 +97,7 @@ def evaluate_one_hot(model, data, writer):
                         pred.append(0)
                 #pred.extend([list(l).index(max(l)) for l in imgs])
             else:
-                samples=  model.decode(z, None, None, zeros)
+                samples=  model.decode(z, None, None, zeros, training=False)
                 if j==0:
                     plot.extend(samples[:10])
                 imgs = [get_colors_old(l.numpy()*255) for l in samples]
@@ -122,18 +122,21 @@ def evaluate_one_hot(model, data, writer):
     print(f"mean: {r_mean}")
 
     colors = ['green','purple','black','brown','blue','cyan','yellow','gray','red', 'pink', 'orange']
-    for c,p,r,f in zip(colors, precision, recall, f1):
-        print(f"{c} & {p} & {r} & {f} \\\\")
+    for i,(c,p,r,f) in enumerate(zip(colors, precision, recall, f1)):
+        if model.color_cond_type == "one_hot":
+            print(f"{c} & {p} & {r} & {f} \\\\")
+        else:
+            print(f"cluster{i+1} & {p} & {r} & {f} \\\\")
     print(f"mean & {p_mean} & {r_mean} & {f1_mean} \\\\")
 
     print("spread image")
-    i = spread_image(np.array(plot),10,11,128,128)
+    #i = spread_image(np.array(plot),10,11,128,128)
     print("save img")
-    imsave(expanduser("/home/users/jmilde/data/imgsplot.png"), np.clip(np.array(i[0])*255, a_min=0, a_max=255))
+    #imsave(expanduser("/home/users/jmilde/data/imgsplot.png"), np.clip(np.array(i[0])*255, a_min=0, a_max=255))
 
     print("write to tensorboard")
     with writer.as_default():
-        tf.summary.image("one-hot-exploration", spread_image(np.array(plot),10,11,128,128), step=3)
+        tf.summary.image("one-hot-exploration", spread_image(np.array(plot),10,one_hot_dim,128,128), step=3)
         tf.summary.scalar("recall"  , round(r_mean,2) , step=0)
         tf.summary.scalar("f1"  , round(f1_mean,2) , step=0)
         tf.summary.scalar("precision"  , round(p_mean,2) , step=0)

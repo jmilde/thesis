@@ -436,8 +436,8 @@ def run_tests(model, writer, img_embs, colors, txts, clusters, spm, btlnk, img_d
                     cond_cluster=None
                 if model.cluster_cond_type:
                     cond_cluster = np.repeat(cluster[np.newaxis, :],  color_batchsize , axis=0)
-                    _, x, _ = model.encode(np.repeat(img_emb[np.newaxis, :],  color_batchsize, axis=0),
-                                       cond_color, cond_txt, cond_cluster)
+                _, x, _ = model.encode(np.repeat(img_emb[np.newaxis, :],  color_batchsize, axis=0),
+                                   cond_color, cond_txt, cond_cluster)
 
                 x_color.extend(model.decode(x[:color_batchsize], cond_color, cond_txt, cond_cluster))
 
@@ -545,4 +545,3 @@ def plot_cluster(path, path_imgs, path_out):
 #do
 #    scp jack:~/data/lld_boosted/$value.png ./imgs/$value.png
 #done
-#

@@ -206,8 +206,9 @@ def main():
     example_data=next(data)
 
     if vae_epochs:
-        manager = tf.train.CheckpointManager(ckpt, path_ckpt, max_to_keep=1, checkpoint_name=model_name + "_VAEpretrain")
-        step=ckpt.step.numpy()
+        if not restore_model:
+            manager = tf.train.CheckpointManager(ckpt, path_ckpt, max_to_keep=1, checkpoint_name=model_name + "_VAEpretrain")
+        step=ckpt.step.numpy()+1
         for _ in trange(vae_epochs, desc="epochs", position=0):
             for _ in trange(ds_size//batch_size, desc="steps in epochs", position=1, leave=False):
                 step+=1
@@ -240,7 +241,9 @@ def main():
 
         save_path = manager.save()
         print("\nsaved VAE-model\n")
-        calculate_scores(model, data, writer, path_fid, path_inception, model_name, batch_size,
+        if iteration == "last":
+            print("calc scores")
+            calculate_scores(model, data, writer, path_fid, path_inception, model_name, batch_size,
                      fid_samples_nr, path_fid_dataset)
 
 
@@ -251,13 +254,13 @@ def main():
 
 
     # training and logging
-    step= ckpt.step.numpy()
+    step= ckpt.step.numpy()+1
 
-    output = model.train(*next(data))
-    write_logs(model, writer, output, step, img_dim)
-    run_tests(model, writer,example_data[0][:4], example_data[1][:4],
-                              example_data[2][:4], example_data[3][:4], spm, btlnk,
-                              img_dim, batch_size=16, step=step,)
+    #output = model.train(*next(data))
+    #write_logs(model, writer, output, step, img_dim)
+    #run_tests(model, writer,example_data[0][:4], example_data[1][:4],
+    #                          example_data[2][:4], example_data[3][:4], spm, btlnk,
+    #                          img_dim, batch_size=16, step=step,)
     if epochs:
         for epoch in trange(epochs, desc="epochs", position=0):
             for _ in trange(ds_size//batch_size, desc="steps in epochs", position=1, leave=False):

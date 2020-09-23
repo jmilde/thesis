@@ -81,12 +81,16 @@ class INTROVAE(tf.keras.Model):
         self.optimizer_dec= tf.keras.optimizers.Adam(lr_dec, beta_1=beta1, beta_2=beta2)
 
     def encode(self, x, color=None, txt=None, cluster=None, training=False):
-        cond = self.conditional_embedder(color, txt, cluster, training=training)
+        cond = None
+        if self.cond_model=="enc_dec" and (self.color_cond_type or self.txt_cond_type or self.cluster_cond_type):
+            cond = self.conditional_embedder(color, txt, cluster, training=training)
         z, mu, lv = self.encoder(x, cond, training=training)
         return z, mu, lv
 
     def decode(self, z, color=None, txt=None, cluster=None, training=False):
-        cond = self.conditional_embedder(color, txt, cluster, training=training)
+        cond = None
+        if self.color_cond_type or self.txt_cond_type or self.cluster_cond_type:
+            cond = self.conditional_embedder(color, txt, cluster, training=training)
         return self.decoder(z, cond, training=training)
 
     def kl_loss(self, mu, lv):

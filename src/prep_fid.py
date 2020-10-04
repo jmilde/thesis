@@ -46,3 +46,6 @@ if __name__=="__main__":
     calc_and_save_reference(data_path=os.path.expanduser("~/data/imgs"),
                             output_path=os.path.expanduser("~/data/fid/mu_var_dataset"),
                             inception_path=os.path.expanduser("~/"))
+    calc_and_save_reference(data_path=os.path.expanduser("~/data/lld_boosted"),
+                            output_path=os.path.expanduser("~/data/fid/mu_var_dataset_lld"),
+                            inception_path=os.path.expanduser("~/"))

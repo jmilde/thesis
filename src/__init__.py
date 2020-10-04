@@ -23,170 +23,10 @@ import tensorflow_addons as tfa
 import os
 from os.path import expanduser
 from src.hyperparameter import params
-
+from src.analyze_introvae import load_model
 
 app = Flask(__name__)
 
-def load_model():
-    p = params["for_flask"]
-    SEED= 27
-
-
-    gpus = tf.config.experimental.list_physical_devices('GPU')
-    print(f"Available gpus: {gpus}")
-    if gpus:
-        if len(gpus)>=p["gpu"]:
-            tf.config.experimental.set_visible_devices(gpus[p["gpu"]], 'GPU')
-            tf.config.experimental.set_memory_growth(gpus[p["gpu"]], True)
-
-    os.environ['PYTHONHASHSEED']=str(SEED)
-    np.random.seed(SEED)
-    tf.random.set_seed(SEED)
-    dataset                  = p["dataset"]
-    path_ckpt                = params["dataset"][dataset]['path_ckpt']
-    path_cond                = params["dataset"][dataset]['path_cond']
-    path_data                = params["dataset"][dataset]['path_data']
-    path_log                 = params["dataset"][dataset]['path_log']
-    path_spm                 = params["dataset"][dataset]['path_spm']
-    path_fid                 = params["dataset"][dataset]["path_fid"]
-    path_fid_dataset         = params["dataset"][dataset]["path_fid_dataset"]
-    path_inception           = params["dataset"][dataset]["path_inception"]
-
-    restore_model            = p['restore_model']
-    img_dim                  = p['img_dim']
-    btlnk                    = p['btlnk']
-    channels                 = p['channels']
-    cond_dim_color           = p['cond_dim_color']
-    cond_model               = p['cond_model']
-    rnn_dim                  = p['rnn_dim']
-    cond_dim_txts            = p['cond_dim_txts']
-    cond_dim_clusters        = p['cond_dim_clusters']
-    emb_dim                  = p['emb_dim']
-    dropout_conditionals     = p['dropout_conditionals']
-    dropout_encoder_resblock = p['dropout_encoder_resblock']
-    vae_epochs               = p['vae_epochs']
-    epochs                   = p['epochs']
-    batch_size               = p['batch_size']
-    logs_per_epoch           = p['logs_per_epoch']
-    weight_rec               = p['weight_rec']
-    weight_kl                = p['weight_kl']
-    weight_neg               = p['weight_neg']
-    weight_aux               = p['weight_aux']
-    m_plus                   = p['m_plus']
-    lr_enc                   = p['lr_enc']
-    lr_dec                   = p['lr_dec']
-    beta1                    = p['beta1']
-    beta2                    = p['beta2']
-    noise_color              = p['noise_color']
-    noise_txt                = p['noise_txt']
-    noise_img                = p['noise_img']
-    txt_len_min              = p["txt_len_min"]
-    txt_len_max              = p["txt_len_max"]
-    ds_size                  = len([l for l
-                                in list(map(len,  np.load(path_cond, allow_pickle=True)["txts"]))
-                                if (txt_len_min<=l<=txt_len_max)])
-    color_cond_type          = p['color_cond_type']
-    cluster_cond_type        = p['cluster_cond_type']
-    txt_cond_type            = p['txt_cond_type']
-    fid_samples_nr           = p["fid_samples_nr"]
-    auxilary                 = p["auxilary"]
-    plot_bn                  = p["plot_bn"]
-    color_cond_dim           = len(np.load(path_cond, allow_pickle=True)["colors_old" if color_cond_type=="one_hot" else "colors"][1])
-    cluster_cond_dim         = 10
-    txt_cond_dim             = len(np.load(path_cond, allow_pickle=True)["txts" if txt_cond_type=="rnn" else "txt_embs"][1])
-    model_name = p["model_name"]
-    start_step = p["start_step"]
-    if not p["normalizer_enc"]:
-        norm = "_NONE"
-        normalizer_enc = None
-        normalizer_dec = None
-    elif p["normalizer_enc"]== "instance":
-        norm = "_INST"
-        normalizer_enc = tfa.layers.InstanceNormalization
-        normalizer_dec = tfa.layers.InstanceNormalization
-    elif p["normalizer_enc"]== "group":
-        norm = "_GRP"
-        normalizer_enc = tfa.layers.GroupNormalization
-        normalizer_dec = tfa.layers.GroupNormalization
-    elif p["normalizer_enc"]== "batch":
-        norm = "_BATCH_"
-        normalizer_enc = tf.keras.layers.BatchNormalization
-        normalizer_dec = tf.keras.layers.BatchNormalization
-    elif p["normalizer_enc"]== "layer":
-        norm = "_LAYER"
-        normalizer_enc = tf.keras.layers.LayerNormalization
-        normalizer_dec = tf.keras.layers.LayerNormalization
-
-
-    logfrq = ds_size//logs_per_epoch//batch_size
-    path_ckpt  = path_ckpt+model_name
-
-    # load sentence piece model
-    spm = load_spm(path_spm + ".model")
-    spm.SetEncodeExtraOptions("bos:eos") # enable start(=2)/end(=1) symbols
-    vocab_dim = spm.vocab_size()
-
-    #pipeline
-    bg = batch_cond_spm(path_data, path_cond, spm, batch_size,
-                        color_cond_type, txt_cond_type, cluster_cond_type,
-                        txt_len_min, txt_len_max)
-    data = pipe(lambda: bg, (tf.float32, tf.float32, tf.float32, tf.float32),
-                (tf.TensorShape([None, None, None, None]),
-                 tf.TensorShape([None, None]),
-                 tf.TensorShape([None, None]),
-                 tf.TensorShape([None, None])), prefetch=6)
-    # model
-    model = INTROVAE(img_dim,
-                     channels,
-                     btlnk,
-                     batch_size,
-                     cond_dim_color,
-                     rnn_dim,
-                     cond_dim_txts,
-                     cond_dim_clusters,
-                     vocab_dim,
-                     emb_dim,
-                     color_cond_dim,
-                     txt_cond_dim,
-                     cluster_cond_dim,
-                     color_cond_type,
-                     txt_cond_type,
-                     cluster_cond_type,
-                     cond_model,
-                     dropout_conditionals=dropout_conditionals,
-                     dropout_encoder_resblock=dropout_encoder_resblock,
-                     normalizer_enc = normalizer_enc,
-                     normalizer_dec = normalizer_dec,
-                     weight_rec=weight_rec,
-                     weight_kl=weight_kl,
-                     weight_neg = weight_neg,
-                     weight_aux = weight_aux,
-                     m_plus = m_plus,
-                     lr_enc= lr_enc,
-                     lr_dec= lr_dec,
-                     beta1 = beta1,
-                     beta2 = beta2,
-                     noise_color =noise_color,
-                     noise_txt =noise_txt,
-                     noise_img =noise_img,
-                     auxilary=auxilary)
-
-    # workaround for memoryleak ?
-    tf.keras.backend.clear_session()
-
-    #logging
-    writer = tf.summary.create_file_writer(pform(path_log, model_name))
-    tf.summary.trace_on(graph=True, profiler=True)
-
-    # checkpoints
-    ckpt = tf.train.Checkpoint(step=tf.Variable(1),
-                               net=model)
-
-
-    manager = tf.train.CheckpointManager(ckpt, path_ckpt, checkpoint_name=model_name, max_to_keep=1)
-    ckpt.restore(manager.latest_checkpoint)
-    print(f"RESTORED {model_name}")
-    return model
 
 
 def prep_colors(data):
@@ -225,7 +65,7 @@ def load_models():
     app.spm = load_spm("/home/jan/data/logo_vocab" + ".model")
     app.spm.SetEncodeExtraOptions("bos:eos")
     #app.predictor = tf.keras.models.load_model('~/models/testmodel_save')
-    app.generator= load_model()
+    app.generator,_= load_model("for_flask")
 
 
 @app.route("/")

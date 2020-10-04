@@ -23,29 +23,51 @@ source env/bin/activate
 
 
 ** install dependencies
-- if you want to install your own tensorflow then add to the requirements.txt file
+- tensorflow > 2.1 is required, we recommend using the latest version due to memory leaks and graph building problems in the earlier realeases.
+- if you dont want to use the systems tensorflow then add to the requirements.txt file
   -> tensorflow-gpu==2.x.x (x.x being the minor version etc.)
-- also adapt the tensorflow-addons version in the requirements file:
-  -> tf=2.0.0 -> tensorflow-addons==0.6
-  -> tf=2.1    -> tensorflow-addons==0.9.1
+- also adapt the tensorflow-addons version in the requirements file (see https://github.com/tensorflow/addons for what version is required)
+  -> eg  tf=2.1    -> tensorflow-addons==0.9.1
 #+BEGIN_SRC sh
 pip install -U pip
 pip install -r requirements.txt
 #+END_SRC
 
-** paths
+** dataset preprocessing
 #+BEGIN_SRC sh
 mkdir data ./data/eudata
 #+END_SRC
-** download data
-- from https://euipo.europa.eu/ohimportal/en/open-data download all trademark data into the folder "data/eudata"
-
-** unpack data
+- from https://euipo.europa.eu/ohimportal/en/open-data download all trademark data into the folder "./data/eudata"
 #+BEGIN_SRC sh
 bash src/unpack_eudata.sh
 #+END_SRC
 
-** preprocess the dataset
+- prepare the two datasets "full dataset" and "lld-boosted"
 #+BEGIN_SRC sh
 python3 -m src.prep_dataset
+python3 -m src.prep_lldboosted
+python3 -m src.prep_vggconditionals
 #+END_SRC
+
+- calculate the mean and covariance for the FID-score
+#+BEGIN_SRC sh
+python3 -m src.calc_and_save_reference
+#+END_SRC
+
+- train the SentencePiece model
+#+BEGIN_SRC sh
+python3 -m src.train_spm
+#+END_SRC
+
+** training
+- train a model normally, by setting all parameters in hyperparameter.py then run
+#+BEGIN_SRC sh
+python3 -m src.train_introvae train_0
+#+END_SRC
+where train_0 is the name of the chosen training configuration in the hyperparameters
+
+- if there are memory leaks, then change ./train.sh accordingly to use the right hyperparameters and run
+#+BEGIN_SRC sh
+bash train.sh
+#+END_SRC
+for a batched training where the model loads and restarts every few epochs

@@ -88,6 +88,7 @@ def main():
     cluster_cond_dim         = 10
     txt_cond_dim             = len(np.load(path_cond, allow_pickle=True)["txts" if txt_cond_type=="rnn" else "txt_embs"][1])
     model_name = p["model_name"]
+    truncate = p["truncate"]
 
     if not p["normalizer_enc"]:
         norm = "_NONE"
@@ -120,10 +121,10 @@ def main():
             modeltype = f"VAE{p['vae_epochs']}-b1{beta1}b2{beta2}"
         txt_info     = f"txt:({txt_cond_type}-dense{cond_dim_txts}-rnn{rnn_dim}-emb{emb_dim}-{txt_len_min}<{txt_len_max})-"  if txt_cond_type else ""
         color_info   = f"color:({color_cond_type}{cond_dim_color})-" if color_cond_type else ""
-        cluster_info = f"cluster:({cluster_cond_type}{cond_dim_clusters})-" if cluster_cond_type else ""
+        cluster_info = f"cluster2:({cluster_cond_type}{cond_dim_clusters})-" if cluster_cond_type else ""
         cond_info    = f"{cond_model}-" if cond_model else ""
         aux_info     = f"aux-{weight_aux}" if auxilary else ""
-        model_name   = (f"{modeltype}-lr{lr_enc}-z{btlnk}"
+        model_name   = (f"yy{modeltype}-lr{lr_enc}-z{btlnk}"
                       f"{aux_info}"
                       f"{cond_info}"
                       f"{color_info}"
@@ -197,7 +198,7 @@ def main():
                                net=model)
 
     if restore_model:
-        manager = tf.train.CheckpointManager(ckpt, path_ckpt, checkpoint_name=model_name, max_to_keep=1)
+        manager = tf.train.CheckpointManager(ckpt, path_ckpt, checkpoint_name=model_name, max_to_keep=10)
         ckpt.restore(manager.latest_checkpoint)
         print(f"\nmodel: {model_name} restored\n")
 
@@ -207,7 +208,7 @@ def main():
 
     if vae_epochs:
         if not restore_model:
-            manager = tf.train.CheckpointManager(ckpt, path_ckpt, max_to_keep=1, checkpoint_name=model_name + "_VAEpretrain")
+            manager = tf.train.CheckpointManager(ckpt, path_ckpt, max_to_keep=10, checkpoint_name=model_name + "_VAEpretrain")
         step=ckpt.step.numpy()+1
         for _ in trange(vae_epochs, desc="epochs", position=0):
             for _ in trange(ds_size//batch_size, desc="steps in epochs", position=1, leave=False):
@@ -244,23 +245,23 @@ def main():
         if iteration == "last":
             print("calc scores")
             calculate_scores(model, data, writer, path_fid, path_inception, model_name, batch_size,
-                     fid_samples_nr, path_fid_dataset)
+                             fid_samples_nr, path_fid_dataset, btlnk=btlnk)
 
 
     # manager for intravae training
     if not restore_model:
-        manager = tf.train.CheckpointManager(ckpt, path_ckpt, max_to_keep=1, checkpoint_name=model_name)
+        manager = tf.train.CheckpointManager(ckpt, path_ckpt, max_to_keep=10, checkpoint_name=model_name)
 
 
 
     # training and logging
     step= ckpt.step.numpy()+1
 
-    #output = model.train(*next(data))
-    #write_logs(model, writer, output, step, img_dim)
-    #run_tests(model, writer,example_data[0][:4], example_data[1][:4],
-    #                          example_data[2][:4], example_data[3][:4], spm, btlnk,
-    #                          img_dim, batch_size=16, step=step,)
+    output = model.train(*next(data))
+    write_logs(model, writer, output, step, img_dim)
+    run_tests(model, writer,example_data[0][:4], example_data[1][:4],
+                              example_data[2][:4], example_data[3][:4], spm, btlnk,
+                              img_dim, batch_size=16, step=step,)
     if epochs:
         for epoch in trange(epochs, desc="epochs", position=0):
             for _ in trange(ds_size//batch_size, desc="steps in epochs", position=1, leave=False):
@@ -281,14 +282,18 @@ def main():
                                   img_dim, batch_size=16, step=step,)
 
             # save model every epoch
-            save_path = manager.save()
-            print(f"\nsaved model after epoch {epoch}\n")
+            if dataset=="all":
+                save_path = manager.save()
+                print(f"\nsaved model after epoch {epoch}\n")
+            elif not (epoch+1)%10:
+                save_path = manager.save()
+                print(f"\nsaved model after epoch {epoch}\n")
 
 
     if iteration == "last":
         # calcualte Scores
         calculate_scores(model, data, writer, path_fid, path_inception, model_name, batch_size,
-                         fid_samples_nr, path_fid_dataset, plot_bn)
+                         fid_samples_nr, path_fid_dataset, plot_bn, truncate=truncate, btlnk=btlnk)
 
 
 def write_logs(model, writer, output, step, img_dim):

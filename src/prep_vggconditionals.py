@@ -175,33 +175,32 @@ def vae_embeddings(path_imgs, path_conditionals, model_name, hyperparameter):
     x = np.load(path_conditionals, allow_pickle=True)
 
     print("save conditionals")
-    np.savez_compressed(path_conditionals,
+    np.savez_compressed(expanduser("~/data/eudata_conditionals.npz"),
                         colors=x["colors"],
                         txts=x["txts"],
                         txt_embs = x["txt_embs"],
                         colors_old = x["colors_old"],
-                        vae_cluster = kmeans.labels_,
+                        vae_cluster = [0],
                         res_cluster=  x["res_cluster"])
 
 
 
 
 def main():
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    print(f"Available gpus: {gpus}")
+    if gpus:
+        tf.config.experimental.set_visible_devices(gpus[3], 'GPU')
+        tf.config.experimental.set_memory_growth(gpus[3], True)
     print("lld dataset")
     path_imgs = os.path.expanduser("~/data/lld_boosted/")
     path_conditionals = os.path.expanduser("~/data/lldboosted_conditionals.npz")
     add_resnet_condtionals(path_imgs, path_conditionals)
 
 
-    #print("vae embeddings")
-    #path_imgs = os.path.expanduser("~/data/lld_boosted/")
-    #path_conditionals = os.path.expanduser("~/data/lldboosted_conditionals.npz")
-    #vae_embeddings(path_imgs, path_conditionals, "VAE10-b10.9b20.999-lr0.0002-z256128,128,3", "train_3")
-
-
-    #path_imgs = os.path.expanduser("~/data/imgs/")
-    #path_conditionals = os.path.expanduser("~/data/eudata_conditionals.npz")
-    #add_resnet_condtionals(path_imgs, path_conditionals)
+    path_imgs = os.path.expanduser("~/data/imgs/")
+    path_conditionals = os.path.expanduser("~/data/eudata_conditionals.npz")
+    add_resnet_condtionals(path_imgs, path_conditionals)
 
 
 if __name__=="__main__":

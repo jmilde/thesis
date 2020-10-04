@@ -1,19 +1,19 @@
 from collections import defaultdict
+from os.path import expanduser
+from sentence_transformers import SentenceTransformer
 from skimage import io
 from skimage.color import gray2rgb
 from skimage.io import imsave
 from skimage.transform import resize
+from sklearn.cluster import MiniBatchKMeans
 from tqdm import tqdm
 import concurrent.futures
 import math
 import numpy as np
 import os
-import xmltodict
 import pandas as pd
-from sklearn.cluster import MiniBatchKMeans
 import webcolors
-from os.path import expanduser
-from sentence_transformers import SentenceTransformer
+import xmltodict
 
 ### value to position
 #x=[[a,b,c] for a in range(0,256,85) for b in range(0,256,85) for c in range(0,256,85)]

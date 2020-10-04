@@ -71,3 +71,11 @@ where train_0 is the name of the chosen training configuration in the hyperparam
 bash train.sh
 #+END_SRC
 for a batched training where the model loads and restarts every few epochs
+
+
+** Interface
+- set up the hyperparameters "for_flask" to load a pretrained model.
+#+BEGIN_SRC
+bash run.sh
+#+END_SRC
+will start up the interface
